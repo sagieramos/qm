@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IMC Technology | Document Builder</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <div class="app-title">IMC Technology</div>
+    <div class="app-subtitle">Quotation & Document Builder</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-danger" onclick="newDocument()">New</button>
+    <button class="btn btn-secondary" onclick="saveDocument(false)">Save</button>
+    <button class="btn btn-primary" onclick="window.print()">Print / Save PDF</button>
+  </div>
+</header>
+
+<main class="page">
+<div class="editor">
+
+<section class="section">
+  <div class="section-title">Company Information</div>
+  <div class="grid">
+    <div class="field">
+      <label for="companyName">Company Name</label>
+      <input id="companyName" value="IMC Technology" oninput="updatePreview()">
+    </div>
+    <div class="field">
+      <label for="companyEmail">Email</label>
+      <input id="companyEmail" type="email" placeholder="yourcompany@email.com" oninput="updatePreview()">
+    </div>
+    <div class="field">
+      <label for="companyPhone">Phone / WhatsApp</label>
+      <input id="companyPhone" placeholder="+234 xxx xxx xxxx" oninput="updatePreview()">
+    </div>
+    <div class="field">
+      <label for="companyWebsite">Website</label>
+      <input id="companyWebsite" placeholder="www.example.com" oninput="updatePreview()">
+    </div>
+  </div>
+  <div class="field" style="margin-top:15px;">
+    <label for="companyAddress">Company Address</label>
+    <textarea id="companyAddress" placeholder="Company address" oninput="updatePreview()"></textarea>
+  </div>
+  <div class="field" style="margin-top:15px;">
+    <label for="companyLogo">Company Logo (optional)</label>
+    <div class="logo-row">
+      <input id="companyLogo" type="file" accept="image/*" onchange="handleLogoUpload(event)">
+      <img id="logoPreview" class="logo-preview" alt="Logo preview">
+      <button class="icon-btn" type="button" onclick="removeLogo()" title="Remove logo" aria-label="Remove logo">×</button>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-title">Document Information</div>
+  <div class="grid-4">
+    <div class="field">
+      <label for="documentType">Document Type</label>
+      <select id="documentType" onchange="updatePreview()">
+        <option value="QUOTATION">Quotation</option>
+        <option value="ESTIMATE">Estimate</option>
+        <option value="INVOICE">Invoice</option>
+        <option value="PROFORMA INVOICE">Proforma Invoice</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="documentNumber">Document Number</label>
+      <input id="documentNumber" value="QUO-2026-0001" oninput="updatePreview()">
+    </div>
+    <div class="field">
+      <label for="documentDate">Date</label>
+      <input id="documentDate" type="date" onchange="updatePreview()">
+    </div>
+    <div class="field">
+      <label for="currency">Currency</label>
+      <select id="currency" onchange="onCurrencyChange()">
+        <option value="NGN">NGN (₦)</option>
+        <option value="USD">USD ($)</option>
+        <option value="GHS">GHS (₵)</option>
+        <option value="KES">KES (KSh)</option>
+        <option value="ZAR">ZAR (R)</option>
+        <option value="EUR">EUR (€)</option>
+        <option value="GBP">GBP (£)</option>
+      </select>
+    </div>
+  </div>
+  <div class="grid" style="margin-top:15px;">
+    <div class="field">
+      <label for="validUntil">Valid Until</label>
+      <input id="validUntil" type="date" onchange="updatePreview()">
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-title">Service / Project Information</div>
+  <div class="field">
+    <label for="projectName">Service / Project</label>
+    <input id="projectName" placeholder="e.g. Borehole Construction" oninput="updatePreview()">
+  </div>
+  <div class="field" style="margin-top:15px;">
+    <label for="scopeOfWork">Scope of Work</label>
+    <textarea id="scopeOfWork" placeholder="Briefly describe the work, installation, construction or services covered by this document..." oninput="updatePreview()"></textarea>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-title">Client Information</div>
+  <div class="grid">
+    <div class="field">
+      <label for="clientName">Client / Company Name</label>
+      <input id="clientName" placeholder="Client or company name" oninput="updatePreview()">
+    </div>
+    <div class="field">
+      <label for="clientEmail">Client Email</label>
+      <input id="clientEmail" type="email" placeholder="client@email.com" oninput="updatePreview()">
+    </div>
+    <div class="field">
+      <label for="clientPhone">Client Phone</label>
+      <input id="clientPhone" placeholder="+234 xxx xxx xxxx" oninput="updatePreview()">
+    </div>
+    <div class="field">
+      <label for="clientAddress">Client Address</label>
+      <textarea id="clientAddress" placeholder="Client address" oninput="updatePreview()"></textarea>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-title">Items / Services</div>
+  <div class="items-wrapper">
+    <table class="items-table">
+      <caption class="sr-only">Items and services</caption>
+      <thead>
+        <tr>
+          <th style="width:38%;">Description</th>
+          <th style="width:9%;">Qty</th>
+          <th style="width:11%;">Unit</th>
+          <th style="width:15%;">Unit Price</th>
+          <th style="width:14%;">Amount</th>
+          <th style="width:13%;"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody id="itemsBody"></tbody>
+    </table>
+  </div>
+  <button class="btn btn-secondary add-item" onclick="addItem()">+ Add Item</button>
+</section>
+
+<section class="section">
+  <div class="section-title">Financial Summary</div>
+  <div class="totals">
+    <div class="total-row">
+      <span>Subtotal</span>
+      <strong id="subtotalDisplay">₦0.00</strong>
+    </div>
+    <div class="total-row">
+      <label for="discount">Discount</label>
+      <input id="discount" type="number" value="0" min="0" oninput="calculateTotals()">
+    </div>
+    <div class="total-row">
+      <label for="tax">Tax / VAT</label>
+      <input id="tax" type="number" value="0" min="0" oninput="calculateTotals()">
+    </div>
+    <div class="total-row grand-total">
+      <span>Total</span>
+      <span id="grandTotalDisplay">₦0.00</span>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-title">Payment & Terms</div>
+  <div class="grid">
+    <div class="field">
+      <label for="paymentDetails">Payment Details</label>
+      <textarea id="paymentDetails" placeholder="Bank Name&#10;Account Name&#10;Account Number" oninput="updatePreview()"></textarea>
+    </div>
+    <div class="field">
+      <label for="terms">Terms & Conditions</label>
+      <textarea id="terms" oninput="updatePreview()">This document is valid for the stated validity period.
+Prices are subject to change after the validity period.
+Work commencement is subject to the agreed payment terms.</textarea>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<div class="preview">
+<h2 style="text-align:center;">Document Preview</h2>
+<div class="document" id="documentPreview">
+
+<div class="document-header">
+  <div>
+    <img id="previewCompanyLogo" class="preview-logo" alt="Company logo">
+    <div class="company-name" id="previewCompanyName">IMC Technology</div>
+    <div class="company-tagline">Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions</div>
+    <div class="company-contact">
+      <div id="previewCompanyAddress"></div>
+      <div>Email: <span id="previewCompanyEmail"></span></div>
+      <div>Phone: <span id="previewCompanyPhone"></span></div>
+      <div id="previewCompanyWebsite"></div>
+    </div>
+  </div>
+  <div>
+    <div class="document-type" id="previewDocumentType">QUOTATION</div>
+    <div class="document-number">
+      <strong>No:</strong> <span id="previewDocumentNumber">QUO-2026-0001</span><br>
+      <strong>Date:</strong> <span id="previewDocumentDate"></span><br>
+      <strong>Valid Until:</strong> <span id="previewValidUntil"></span>
+    </div>
+  </div>
+</div>
+
+<div class="document-info">
+  <div>
+    <div class="info-title">Bill To</div>
+    <div class="info-value">
+      <strong id="previewClientName">—</strong><br>
+      <span id="previewClientAddress"></span><br>
+      <span id="previewClientPhone"></span><br>
+      <span id="previewClientEmail"></span>
+    </div>
+  </div>
+  <div>
+    <div class="info-title">Service / Project</div>
+    <div class="info-value" id="previewProjectName">—</div>
+  </div>
+</div>
+
+<div class="scope-box">
+  <div class="info-title">Scope of Work</div>
+  <div class="scope-text" id="previewScopeOfWork">—</div>
+</div>
+
+<table class="document-table">
+  <caption class="sr-only">Document line items</caption>
+  <thead>
+    <tr>
+      <th style="width:5%;">#</th>
+      <th>Description</th>
+      <th style="width:10%;">Qty</th>
+      <th style="width:12%;">Unit</th>
+      <th style="width:20%;">Amount</th>
+    </tr>
+  </thead>
+  <tbody id="previewItemsBody"></tbody>
+</table>
+
+<div class="document-totals">
+  <div class="document-total-row"><span>Subtotal</span><strong id="previewSubtotal">₦0.00</strong></div>
+  <div class="document-total-row"><span>Discount</span><strong id="previewDiscount">₦0.00</strong></div>
+  <div class="document-total-row"><span>Tax / VAT</span><strong id="previewTax">₦0.00</strong></div>
+  <div class="document-total-row document-grand-total"><span>Total</span><strong id="previewGrandTotal">₦0.00</strong></div>
+</div>
+
+<div class="notes">
+  <div><h4>Payment Details</h4><p id="previewPaymentDetails">—</p></div>
+  <div><h4>Terms & Conditions</h4><p id="previewTerms">—</p></div>
+</div>
+
+<div class="document-footer">
+  <strong>IMC Technology</strong><br>
+  Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions<br>
+  Thank you for your business.
+</div>
+
+</div>
+</div>
+
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>   
