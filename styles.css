@@ -78,6 +78,7 @@ button, input, textarea, select { font: inherit; }
 .document-type { text-align:right; font-size:27px; font-weight:800; letter-spacing:-.035em; color:var(--primary); }
 .document-number { text-align:right; margin-top:9px; font-size:11px; line-height:1.9; color:#4b5563; }
 .document-info { display:grid; grid-template-columns:1fr 1fr; gap:35px; margin:25px 0; }
+.document-info.document-specific-info[hidden] { display:none; }
 .info-title { font-size:9px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
 .info-value { font-size:12px; line-height:1.7; }
 .scope-box { margin-top:20px; padding:13px 15px; background:#f4f8f5; border-left:3px solid var(--primary); }

@@ -62,16 +62,20 @@
   <div class="grid-4">
     <div class="field">
       <label for="documentType">Document Type</label>
-      <select id="documentType" onchange="updatePreview()">
+      <select id="documentType" onchange="onDocumentTypeChange()">
         <option value="QUOTATION">Quotation</option>
         <option value="ESTIMATE">Estimate</option>
         <option value="INVOICE">Invoice</option>
         <option value="PROFORMA INVOICE">Proforma Invoice</option>
+        <option value="RECEIPT">Receipt</option>
+        <option value="PURCHASE ORDER">Purchase Order</option>
+        <option value="CREDIT NOTE">Credit Note</option>
+        <option value="DELIVERY NOTE">Delivery Note</option>
       </select>
     </div>
     <div class="field">
       <label for="documentNumber">Document Number</label>
-      <input id="documentNumber" value="QUO-2026-0001" oninput="updatePreview()">
+      <input id="documentNumber" value="" oninput="onDocumentNumberInput()">
     </div>
     <div class="field">
       <label for="documentDate">Date</label>
@@ -90,12 +94,7 @@
       </select>
     </div>
   </div>
-  <div class="grid" style="margin-top:15px;">
-    <div class="field">
-      <label for="validUntil">Valid Until</label>
-      <input id="validUntil" type="date" onchange="updatePreview()">
-    </div>
-  </div>
+  <div id="documentSpecificFields" class="grid" style="margin-top:15px;"></div>
 </section>
 
 <section class="section">
@@ -211,10 +210,10 @@ Work commencement is subject to the agreed payment terms.</textarea>
   </div>
   <div>
     <div class="document-type" id="previewDocumentType">QUOTATION</div>
-    <div class="document-number">
-      <strong>No:</strong> <span id="previewDocumentNumber">QUO-2026-0001</span><br>
-      <strong>Date:</strong> <span id="previewDocumentDate"></span><br>
-      <strong>Valid Until:</strong> <span id="previewValidUntil"></span>
+<div class="document-number">
+      <strong id="previewNumberLabel">Quotation No.:</strong> <span id="previewDocumentNumber">QUO-2026-0001</span><br>
+      <strong>Date:</strong> <span id="previewDocumentDate"></span>
+      <div id="previewMetaRows"></div>
     </div>
   </div>
 </div>
@@ -234,6 +233,8 @@ Work commencement is subject to the agreed payment terms.</textarea>
     <div class="info-value" id="previewProjectName">—</div>
   </div>
 </div>
+
+<div id="previewSpecificInfo" class="document-info document-specific-info" hidden></div>
 
 <div class="scope-box">
   <div class="info-title">Scope of Work</div>
