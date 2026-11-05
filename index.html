@@ -16,12 +16,24 @@
   <div class="header-actions">
     <button class="btn btn-danger" onclick="newDocument()">New</button>
     <button class="btn btn-secondary" onclick="saveDocument(false)">Save</button>
+    <button class="btn btn-secondary" onclick="exportBackup()">Export backup</button>
+    <label class="btn btn-secondary backup-import">Import backup<input type="file" accept="application/json,.json" onchange="importBackup(event)"></label>
     <button class="btn btn-primary" onclick="window.print()">Print / Save PDF</button>
   </div>
 </header>
 
 <main class="page">
 <div class="editor">
+
+<section class="section document-library">
+  <div class="section-title">Saved Documents</div>
+  <div class="document-library-row">
+    <div class="field"><label for="savedDocuments">Open a saved document</label><select id="savedDocuments" onchange="openSelectedDocument()"><option value="">Current draft</option></select></div>
+    <button class="btn btn-secondary" type="button" onclick="deleteCurrentDocument()">Delete</button>
+  </div>
+  <div id="conversionActions" class="conversion-actions"></div>
+  <div id="documentHistory" class="document-history"></div>
+</section>
 
 <section class="section">
   <div class="section-title">Company Information</div>
@@ -74,8 +86,12 @@
       </select>
     </div>
     <div class="field">
+      <label for="documentStatus">Status</label>
+      <select id="documentStatus" onchange="onDocumentStatusChange()"></select>
+    </div>
+    <div class="field">
       <label for="documentNumber">Document Number</label>
-      <input id="documentNumber" value="" oninput="onDocumentNumberInput()">
+      <input id="documentNumber" value="" readonly aria-readonly="true">
     </div>
     <div class="field">
       <label for="documentDate">Date</label>
@@ -210,6 +226,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
   </div>
   <div>
     <div class="document-type" id="previewDocumentType">QUOTATION</div>
+    <div id="previewDocumentStatus" class="preview-status">Draft</div>
 <div class="document-number">
       <strong id="previewNumberLabel">Quotation No.:</strong> <span id="previewDocumentNumber">QUO-2026-0001</span><br>
       <strong>Date:</strong> <span id="previewDocumentDate"></span>
@@ -280,6 +297,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+<script src="db.js"></script>
 <script src="app.js"></script>
 </body>
 </html>   
