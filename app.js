@@ -99,7 +99,7 @@ function onDocumentTypeChange() {
   const type = document.getElementById('documentType').value;
   currentDocumentType = type;
   activeDocumentSignature = getAutoIncludedSignature(type);
-  document.title = `IMC Technology | ${DOCUMENT_TYPES[type]?.title || 'Document'} Builder`;
+  document.title = 'IMC Technology';
   if (activeDocumentId) { activeSourceId = activeDocumentId; activeSourceNumber = document.getElementById('documentNumber').value; }
   activeDocumentId = null;
   activeStatus = 'Draft';
@@ -238,6 +238,27 @@ function formatCurrency(value) {
   }
 }
 
+function makePreviewCurrency(value) {
+  const currency=document.getElementById('currency')?.value || 'NGN';
+  const locale=CURRENCY_LOCALES[currency] || 'en-US';
+  const amount=document.createElement('span');
+  try {
+    const parts=new Intl.NumberFormat(locale,{style:'currency',currency,minimumFractionDigits:2,maximumFractionDigits:2}).formatToParts(value || 0);
+    parts.forEach((part,index)=>{
+      if(part.type==='currency') {
+        const symbol=document.createElement('span');symbol.className='document-currency-symbol';symbol.textContent=part.value;amount.appendChild(symbol);
+      } else if(part.type==='literal' && /^\s+$/.test(part.value) && (parts[index-1]?.type==='currency'||parts[index+1]?.type==='currency')) {
+        const spacing=document.createElement('span');spacing.className='document-currency-spacing';spacing.textContent=part.value;amount.appendChild(spacing);
+      } else amount.appendChild(document.createTextNode(part.value));
+    });
+  } catch { amount.textContent=Number(value || 0).toFixed(2); }
+  return amount;
+}
+
+function setPreviewCurrency(id,value) {
+  document.getElementById(id).replaceChildren(makePreviewCurrency(value));
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -361,10 +382,10 @@ function calculateTotals() {
 
   document.getElementById('subtotalDisplay').textContent = formatCurrency(subtotal);
   document.getElementById('grandTotalDisplay').textContent = formatCurrency(total);
-  document.getElementById('previewSubtotal').textContent = formatCurrency(subtotal);
-  document.getElementById('previewDiscount').textContent = formatCurrency(discount);
-  document.getElementById('previewTax').textContent = formatCurrency(tax);
-  document.getElementById('previewGrandTotal').textContent = formatCurrency(total);
+  setPreviewCurrency('previewSubtotal',subtotal);
+  setPreviewCurrency('previewDiscount',discount);
+  setPreviewCurrency('previewTax',tax);
+  setPreviewCurrency('previewGrandTotal',total);
   reconcileInvoicePaymentStatus(total);
 }
 
@@ -431,13 +452,20 @@ function updatePreview() {
   const get = id => document.getElementById(id).value;
 
   document.getElementById('previewCompanyName').textContent = get('companyName');
-  document.getElementById('previewCompanyEmail').textContent = get('companyEmail');
-  document.getElementById('previewCompanyPhone').textContent = get('companyPhone');
+  const companyEmail=get('companyEmail').trim(), companyPhone=get('companyPhone').trim(), companyAddress=get('companyAddress').trim(), companyWebsite=get('companyWebsite').trim();
+  document.getElementById('previewCompanyEmail').textContent = companyEmail;
+  document.getElementById('previewCompanyPhone').textContent = companyPhone;
   document.getElementById('previewCompanyWebsite').textContent = get('companyWebsite');
-  document.getElementById('previewCompanyAddress').textContent = get('companyAddress');
+  document.getElementById('previewCompanyEmailRow').hidden=!companyEmail;
+  document.getElementById('previewCompanyPhoneRow').hidden=!companyPhone;
+  document.getElementById('previewCompanyWebsite').hidden=!companyWebsite;
+  document.getElementById('previewCompanyAddress').textContent = companyAddress;
+  document.getElementById('previewCompanyAddress').hidden=!companyAddress;
+  document.getElementById('previewFooterCompanyName').textContent=get('companyName').trim() || 'Business';
 
   const type = get('documentType');
   const config = DOCUMENT_TYPES[type] || DOCUMENT_TYPES.QUOTATION;
+  document.getElementById('previewPdfCurrencyCode').textContent=`(${get('currency')})`;
   reconcileInvoicePaymentStatus();
   document.getElementById('previewDocumentType').textContent = config.title.toUpperCase();
   document.getElementById('previewNumberLabel').textContent = config.numberLabel;
@@ -458,32 +486,48 @@ function updatePreview() {
     if (!value) return;
     const row = document.createElement('div');
     const label = labels[field.id] || field.label;
-    const display = field.type === 'date' ? formatDate(value) : (['amountPaid','amountReceived','creditAmount'].includes(field.id) ? formatCurrency(Number(value)) : value);
-    row.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(display)}`;
+    row.innerHTML = `<strong>${escapeHtml(label)}:</strong> `;
+    if(field.type==='date') row.appendChild(document.createTextNode(formatDate(value)));
+    else if(['amountPaid','amountReceived','creditAmount'].includes(field.id)) row.appendChild(makePreviewCurrency(Number(value)));
+    else row.appendChild(document.createTextNode(value));
     metaRows.appendChild(row);
   });
   if(type==='INVOICE' && Number(values.amountReceived)>0 && Number(values.amountReceived)<currentEditorTotal()-0.01) {
     const balanceRow=document.createElement('div');
-    balanceRow.innerHTML=`<strong>Outstanding Balance:</strong> ${escapeHtml(formatCurrency(getInvoiceOutstandingBalance()))}`;
+    const label=document.createElement('strong');label.textContent='Outstanding Balance:';balanceRow.append(label,document.createTextNode(' '),makePreviewCurrency(getInvoiceOutstandingBalance()));
     metaRows.appendChild(balanceRow);
   }
 
   document.getElementById('previewProjectName').textContent = get('projectName') || '—';
-  document.getElementById('previewScopeOfWork').textContent = get('scopeOfWork') || '—';
+  const scope=get('scopeOfWork').trim();
+  document.getElementById('previewScopeOfWork').textContent = scope || '—';
+  document.getElementById('previewScopeBlock').hidden=!scope;
 
   document.getElementById('previewClientName').textContent = get('clientName') || '—';
   document.getElementById('previewClientAddress').textContent = get('clientAddress');
   document.getElementById('previewClientPhone').textContent = get('clientPhone');
   document.getElementById('previewClientEmail').textContent = get('clientEmail');
 
-  document.getElementById('previewPaymentDetails').textContent = get('paymentDetails') || '—';
-  document.getElementById('previewTerms').textContent = get('terms') || '—';
+  const paymentDetails=get('paymentDetails').trim(), terms=get('terms').trim();
+  document.getElementById('previewPaymentDetails').textContent = paymentDetails;
+  document.getElementById('previewTerms').textContent = terms;
+  document.getElementById('previewPaymentBlock').hidden=!paymentDetails;
+  document.getElementById('previewTermsBlock').hidden=!terms;
+  document.getElementById('previewNotes').hidden=!paymentDetails&&!terms;
+  document.getElementById('previewNotes').classList.toggle('notes-single',!paymentDetails||!terms);
   const infoTitles = document.querySelectorAll('.document-info .info-title');
   infoTitles[0].textContent = type === 'PURCHASE ORDER' ? 'Supplier' : 'Bill To';
   infoTitles[1].textContent = type === 'PURCHASE ORDER' ? 'Delivery Address' : 'Service / Project';
   if (type === 'PURCHASE ORDER' && values.supplierName) document.getElementById('previewClientName').textContent = values.supplierName;
   if (type === 'PURCHASE ORDER' && values.supplierAddress) document.getElementById('previewClientAddress').textContent = values.supplierAddress;
   if (type === 'PURCHASE ORDER' && values.deliveryAddress) document.getElementById('previewProjectName').textContent = values.deliveryAddress;
+  const clientHasData=(type==='PURCHASE ORDER'
+    ? [values.supplierName,values.supplierAddress]
+    : [get('clientName'),get('clientAddress'),get('clientPhone'),get('clientEmail')]).some(value=>String(value||'').trim());
+  const projectHasData=(type==='PURCHASE ORDER'?values.deliveryAddress:get('projectName')).toString().trim().length>0;
+  document.getElementById('previewBillToBlock').hidden=!clientHasData;
+  document.getElementById('previewProjectBlock').hidden=!projectHasData;
+  document.getElementById('previewPrimaryInfo').hidden=!clientHasData&&!projectHasData;
   const supplemental = document.getElementById('previewSpecificInfo');
   supplemental.replaceChildren();
   const supplementalFields = { acceptanceTerms:'Acceptance Terms', creditReason:'Reason for Credit', recipientConfirmation:'Recipient Confirmation' };
@@ -499,16 +543,22 @@ function updatePreview() {
 
   const previewBody = document.getElementById('previewItemsBody');
   previewBody.innerHTML = '';
-  document.querySelectorAll('#itemsBody tr').forEach((row, index) => {
+  let previewItemNumber=0;
+  document.querySelectorAll('#itemsBody tr').forEach(row => {
     const description = row.querySelector('.description').value;
     const quantity = parseFloat(row.querySelector('.quantity').value) || 0;
     const unit = row.querySelector('.unit').value;
     const price = parseFloat(row.querySelector('.price').value) || 0;
     const amount = quantity * price;
+    if (!description.trim() && !amount) return;
+    previewItemNumber++;
     const previewRow = document.createElement('tr');
-    previewRow.innerHTML = `<td>${index + 1}</td><td>${escapeHtml(description)}</td><td>${quantity}</td><td>${escapeHtml(unit)}</td><td>${formatCurrency(amount)}</td>`;
+    previewRow.innerHTML = `<td>${previewItemNumber}</td><td>${escapeHtml(description.trim() || 'Item')}</td><td>${quantity}</td><td>${escapeHtml(unit)}</td>`;
+    const amountCell=document.createElement('td');amountCell.appendChild(makePreviewCurrency(amount));previewRow.appendChild(amountCell);
     previewBody.appendChild(previewRow);
   });
+  document.getElementById('previewItemsTable').hidden=previewItemNumber===0;
+  document.getElementById('previewTotals').hidden=previewItemNumber===0;
 
   calculateTotals();
   if (!loadingDocument) scheduleAutosave();
@@ -655,7 +705,7 @@ async function loadDocumentData(data) {
   specificData = { ...(data.document?.specific || {}) };
   if (!specificData.validUntil && data.document?.validUntil) specificData.validUntil = data.document.validUntil;
   documentNumbers = { [currentDocumentType]: data.document?.number || data.number || '' };
-  document.title = `IMC Technology | ${DOCUMENT_TYPES[currentDocumentType]?.title || 'Document'} Builder`;
+  document.title = 'IMC Technology';
   document.querySelector('.page-heading h1').textContent=`New ${DOCUMENT_TYPES[currentDocumentType]?.title || 'business document'}`;
   renderDocumentSpecificFields(currentDocumentType, specificData);
   if (!data.terms) document.getElementById('terms').value = DOCUMENT_TYPES[currentDocumentType]?.terms || '';
@@ -1243,7 +1293,7 @@ async function newDocument(skipConfirmation = false, type = 'QUOTATION', persist
   activeSourceNumber = null;
   activeStatus = 'Draft';
   document.getElementById('documentHistory').replaceChildren();
-  document.title = `IMC Technology | ${DOCUMENT_TYPES[type].title} Builder`;
+  document.title = 'IMC Technology';
   document.querySelector('.page-heading h1').textContent=`New ${DOCUMENT_TYPES[type].title}`;
   documentNumbers = {};
   specificData = {};

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>IMC Technology | Document Builder</title>
+<title>IMC Technology</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="improvement.css">
 </head>
@@ -299,8 +299,8 @@ Work commencement is subject to the agreed payment terms.</textarea>
     <div class="company-tagline">Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions</div>
     <div class="company-contact">
       <div id="previewCompanyAddress"></div>
-      <div>Email: <span id="previewCompanyEmail"></span></div>
-      <div>Phone: <span id="previewCompanyPhone"></span></div>
+      <div id="previewCompanyEmailRow">Email: <span id="previewCompanyEmail"></span></div>
+      <div id="previewCompanyPhoneRow">Phone: <span id="previewCompanyPhone"></span></div>
       <div id="previewCompanyWebsite"></div>
     </div>
   </div>
@@ -315,8 +315,8 @@ Work commencement is subject to the agreed payment terms.</textarea>
   </div>
 </div>
 
-<div class="document-info">
-  <div>
+<div class="document-info" id="previewPrimaryInfo">
+  <div id="previewBillToBlock">
     <div class="info-title">Bill To</div>
     <div class="info-value">
       <strong id="previewClientName">—</strong><br>
@@ -325,7 +325,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
       <span id="previewClientEmail"></span>
     </div>
   </div>
-  <div>
+  <div id="previewProjectBlock">
     <div class="info-title">Service / Project</div>
     <div class="info-value" id="previewProjectName">—</div>
   </div>
@@ -333,12 +333,12 @@ Work commencement is subject to the agreed payment terms.</textarea>
 
 <div id="previewSpecificInfo" class="document-info document-specific-info" hidden></div>
 
-<div class="scope-box">
+<div class="scope-box" id="previewScopeBlock">
   <div class="info-title">Scope of Work</div>
   <div class="scope-text" id="previewScopeOfWork">—</div>
 </div>
 
-<table class="document-table">
+<table class="document-table" id="previewItemsTable">
   <caption class="sr-only">Document line items</caption>
   <thead>
     <tr>
@@ -346,27 +346,27 @@ Work commencement is subject to the agreed payment terms.</textarea>
       <th>Description</th>
       <th style="width:10%;">Qty</th>
       <th style="width:12%;">Unit</th>
-      <th style="width:20%;">Amount</th>
+      <th style="width:20%;">Amount <span id="previewPdfCurrencyCode" class="print-currency-code">(NGN)</span></th>
     </tr>
   </thead>
   <tbody id="previewItemsBody"></tbody>
 </table>
 
-<div class="document-totals">
-  <div class="document-total-row"><span>Subtotal</span><strong id="previewSubtotal">₦0.00</strong></div>
-  <div class="document-total-row"><span>Discount</span><strong id="previewDiscount">₦0.00</strong></div>
-  <div class="document-total-row"><span>Tax / VAT</span><strong id="previewTax">₦0.00</strong></div>
-  <div class="document-total-row document-grand-total"><span>Total</span><strong id="previewGrandTotal">₦0.00</strong></div>
+<div class="document-totals" id="previewTotals">
+  <div class="document-total-row"><span>Subtotal</span><strong id="previewSubtotal">0.00</strong></div>
+  <div class="document-total-row"><span>Discount</span><strong id="previewDiscount">0.00</strong></div>
+  <div class="document-total-row"><span>Tax / VAT</span><strong id="previewTax">0.00</strong></div>
+  <div class="document-total-row document-grand-total"><span>Total</span><strong id="previewGrandTotal">0.00</strong></div>
 </div>
 
-<div class="notes">
-  <div><h4>Payment Details</h4><p id="previewPaymentDetails">—</p></div>
-  <div><h4>Terms & Conditions</h4><p id="previewTerms">—</p></div>
+<div class="notes" id="previewNotes">
+  <div id="previewPaymentBlock"><h4>Payment Details</h4><p id="previewPaymentDetails"></p></div>
+  <div id="previewTermsBlock"><h4>Terms & Conditions</h4><p id="previewTerms"></p></div>
 </div>
 
 <div class="document-footer">
   <div id="previewAuthorizedSignature" class="document-authorized-signature" hidden></div>
-  <strong>IMC Technology</strong><br>
+  <strong id="previewFooterCompanyName">IMC Technology</strong><br>
   Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions<br>
   Thank you for your business.
 </div>
