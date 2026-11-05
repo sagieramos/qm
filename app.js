@@ -6,6 +6,10 @@ const CURRENCY_LOCALES = {
 
 let companyLogoData = '';
 let autosaveTimer = null;
+let saveQueue = Promise.resolve();
+let changeRevision = 0;
+let currentView = 'dashboard';
+let cachedDocuments = [];
 const DOCUMENT_TYPES = {
   'QUOTATION': { title: 'Quotation', prefix: 'QUO', numberLabel: 'Quotation No.', terms: 'This quotation is valid for the stated validity period.\nPrices are subject to change after the validity period.\nWork commencement is subject to the agreed payment terms.' },
   'ESTIMATE': { title: 'Estimate', prefix: 'EST', numberLabel: 'Estimate No.', terms: 'This estimate is an approximation based on the information currently available.\nFinal costs may change if the project scope or site conditions change.' },
@@ -42,7 +46,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     await BusinessDB.open();
     await BusinessDB.migrateLegacy();
+    await loadCompanyProfile();
     await loadDocument();
+      await navigateTo('dashboard', false);
   } catch (error) {
     showToast(`Local database error: ${error.message}`);
   }
@@ -160,6 +166,13 @@ function showToast(msg) {
   t.classList.add('show');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function setSaveStatus(status) {
+  const host=document.getElementById('saveStatus');
+  if (!host) return;
+  host.textContent=status;
+  host.dataset.state=status.toLowerCase().replaceAll(' ','-');
 }
 
 /* ── Items CRUD ────────────────────────────────────────── */
@@ -374,6 +387,8 @@ function updatePreview() {
 
 /* ── Autosave & Persistence ────────────────────────────── */
 function scheduleAutosave() {
+  changeRevision++;
+  setSaveStatus('Unsaved changes');
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => saveDocument(true), 900);
 }
@@ -431,7 +446,9 @@ function saveDocument(silent) {
   if (loadingDocument) return Promise.resolve();
   clearTimeout(autosaveTimer);
   autosaveTimer = null;
-  return (async () => {
+  setSaveStatus('Saving...');
+  const revision = changeRevision;
+  const operation = saveQueue.then(async () => {
     try {
       const payload = collectDocumentData();
       const saved = activeDocumentId ? await BusinessDB.updateDocument(payload) : await BusinessDB.createDocument(payload);
@@ -443,17 +460,20 @@ function saveDocument(silent) {
       document.getElementById('previewDocumentType').textContent = (DOCUMENT_TYPES[saved.type]?.title || saved.type).toUpperCase();
       documentNumbers[saved.type] = saved.number;
       renderStatusOptions(saved.type, saved.status);
-      await refreshDocumentList();
       await renderDocumentHistory(saved.id);
       refreshDocumentActions();
+      if (revision === changeRevision) setSaveStatus('Saved');
       if (!silent) showToast('Document saved.');
       return saved;
     } catch (e) {
       console.error(e);
+      setSaveStatus('Save failed');
       showToast(`Could not save document: ${e.message}`);
       return null;
     }
-  })();
+  });
+  saveQueue = operation.then(() => undefined, () => undefined);
+  return operation;
 }
 
 async function loadDocumentData(data) {
@@ -498,6 +518,7 @@ async function loadDocumentData(data) {
   if (!specificData.validUntil && data.document?.validUntil) specificData.validUntil = data.document.validUntil;
   documentNumbers = { [currentDocumentType]: data.document?.number || data.number || '' };
   document.title = `IMC Technology | ${DOCUMENT_TYPES[currentDocumentType]?.title || 'Document'} Builder`;
+  document.querySelector('.page-heading h1').textContent=`New ${DOCUMENT_TYPES[currentDocumentType]?.title || 'business document'}`;
   renderDocumentSpecificFields(currentDocumentType, specificData);
   if (!data.terms) document.getElementById('terms').value = DOCUMENT_TYPES[currentDocumentType]?.terms || '';
   (data.items || []).forEach(item => addItem(item.description, item.quantity, item.unit, item.price));
@@ -506,14 +527,23 @@ async function loadDocumentData(data) {
   updatePreview();
   loadingDocument = false;
   document.getElementById('documentNumber').value = data.number || data.document?.number || '';
-  await refreshDocumentList();
   await renderDocumentHistory(data.id);
   refreshDocumentActions();
+  setSaveStatus(data.id ? 'Saved' : 'Unsaved changes');
 }
 
 async function loadDocument() {
   const docs = await BusinessDB.listDocuments();
   if (docs.length) return loadDocumentData(docs[0]);
+  loadingDocument=true;
+  const profile=await loadCompanyProfile().catch(()=>({}));
+  document.getElementById('companyName').value=profile.name||'IMC Technology';
+  document.getElementById('companyEmail').value=profile.email||'';
+  document.getElementById('companyPhone').value=profile.phone||'';
+  document.getElementById('companyWebsite').value=profile.website||'';
+  document.getElementById('companyAddress').value=profile.address||'';
+  companyLogoData=profile.logo||'';
+  applyLogoPreview();
   currentDocumentType = 'QUOTATION';
   renderStatusOptions(currentDocumentType, 'Draft');
   const firstExpiry = new Date(); firstExpiry.setDate(firstExpiry.getDate()+30);
@@ -521,55 +551,218 @@ async function loadDocument() {
   renderDocumentSpecificFields(currentDocumentType, specificData);
   document.getElementById('terms').value = DOCUMENT_TYPES.QUOTATION.terms;
   addItem(); addItem();
-  await saveDocument(true);
   updatePreview();
+  loadingDocument=false;
+  setSaveStatus('Saved');
 }
 
-async function refreshDocumentList() {
-  const select = document.getElementById('savedDocuments');
-  if (!select) return;
-  const docs = await BusinessDB.listDocuments();
-  select.replaceChildren();
-  docs.forEach(doc => {
-    const option = document.createElement('option');
-    option.value = doc.id;
-    option.textContent = `${doc.number} · ${DOCUMENT_TYPES[doc.type]?.title || doc.type} · ${doc.status || 'Draft'}${doc.client?.name ? ` · ${doc.client.name}` : ''}`;
-    select.appendChild(option);
+function populateCompanyProfile(company = {}) {
+  const values = {
+    profileCompanyName:company.name || 'IMC Technology', profileCompanyEmail:company.email || '',
+    profileCompanyPhone:company.phone || '', profileCompanyWebsite:company.website || '',
+    profileCompanyAddress:company.address || ''
+  };
+  Object.entries(values).forEach(([id,value]) => { const input=document.getElementById(id); if(input) input.value=value; });
+  const preview=document.getElementById('profileLogoPreview');
+  if (preview) { preview.src=company.logo || ''; preview.hidden=!company.logo; }
+  const file=document.getElementById('profileCompanyLogo');
+  if (file) file.dataset.logo=company.logo || '';
+}
+
+async function loadCompanyProfile() {
+  const companies=await BusinessDB.getRecords('companies');
+  const profile=companies.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))[0] || {};
+  populateCompanyProfile(profile);
+  return profile;
+}
+
+async function saveCompanyProfile() {
+  const file=document.getElementById('profileCompanyLogo');
+  let logo=file.dataset.logo || '';
+  if (file.files?.[0]) {
+    const image=file.files[0];
+    if (image.size > 2*1024*1024) { showToast('Logo too large (max 2 MB).'); return; }
+    logo=await new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error('Could not read the logo file.')); reader.readAsDataURL(image); }).catch(error=>{ showToast(error.message); return null; });
+    if (logo === null) return;
+  }
+  const company={id:'company:default', name:document.getElementById('profileCompanyName').value.trim(), email:document.getElementById('profileCompanyEmail').value.trim(), phone:document.getElementById('profileCompanyPhone').value.trim(), website:document.getElementById('profileCompanyWebsite').value.trim(), address:document.getElementById('profileCompanyAddress').value.trim(), logo, updatedAt:new Date().toISOString()};
+  try {
+    await BusinessDB.putRecord('companies',company);
+    populateCompanyProfile(company);
+    showToast('Company profile saved.');
+  } catch(error) { showToast(`Could not save company profile: ${error.message}`); }
+}
+
+function navigateTo(view, saveCurrent = true) {
+  if (saveCurrent && currentView === 'editor' && view !== 'editor') {
+    return saveDocument(true).then(saved => { if (saved) navigateTo(view, false); });
+  }
+  currentView=view;
+  document.querySelectorAll('.route-view').forEach(section => { section.hidden=section.id !== `${view}View`; });
+  const workspace=document.getElementById('workspacePage');
+  workspace.hidden=view !== 'editor';
+  document.querySelectorAll('.nav-link[data-view]').forEach(link => link.classList.toggle('is-active',link.dataset.view===view));
+  if (view === 'dashboard') renderDashboard();
+  if (view === 'documents') renderDocumentTable();
+  if (view === 'customers') renderCustomers();
+  if (view === 'company') loadCompanyProfile();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function showDocumentPreview() {
+  const saved=await saveDocument(true);
+  if (!saved) return;
+  currentView='editor';
+  document.getElementById('workspacePage').hidden=false;
+  document.querySelectorAll('.route-view').forEach(section=>section.hidden=true);
+  document.querySelectorAll('.nav-link[data-view]').forEach(link=>link.classList.remove('is-active'));
+  document.getElementById('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function openNewDocumentDialog() {
+  document.getElementById('newDocumentDialog').showModal();
+}
+
+async function confirmNewDocument() {
+  const type=document.getElementById('newDocumentType').value;
+  document.getElementById('newDocumentDialog').close();
+  await newDocument(false,type);
+}
+
+function moneyForDocument(doc) {
+  const amount=calculateDocumentTotal(doc);
+  const currency=doc.document?.currency || 'NGN';
+  try { return new Intl.NumberFormat('en-NG',{style:'currency',currency,maximumFractionDigits:2}).format(amount); }
+  catch { return `${amount.toFixed(2)} ${currency}`; }
+}
+
+function dateForList(value) {
+  return value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-NG',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+}
+
+function documentActionButton(label, action, doc) {
+  const button=document.createElement('button'); button.type='button'; button.className='table-action'; button.textContent=label;
+  button.onclick=()=>action(doc); return button;
+}
+
+async function renderDashboard() {
+  try {
+    cachedDocuments=await BusinessDB.listDocuments();
+    const parties=await BusinessDB.getRecords('parties');
+    const customers=new Set(cachedDocuments.map(doc=>doc.client?.name?.trim()).filter(Boolean));
+    const summary=[['Documents',cachedDocuments.length,'Across all document types'],['Customers',Math.max(customers.size,parties.filter(row=>row.kind==='customer').length),'From saved records'],['Open invoices',cachedDocuments.filter(doc=>doc.type==='INVOICE'&&doc.status!=='Paid').length,'Awaiting payment'],['Purchase orders',cachedDocuments.filter(doc=>doc.type==='PURCHASE ORDER').length,'Supplier orders']];
+    const host=document.getElementById('dashboardSummary'); host.replaceChildren();
+    summary.forEach(([title,value,caption])=>{const card=document.createElement('article');card.className='summary-card';const name=document.createElement('div');name.className='summary-label';name.textContent=title;const amount=document.createElement('strong');amount.textContent=value;const note=document.createElement('span');note.textContent=caption;card.append(name,amount,note);host.appendChild(card);});
+    const recent=document.getElementById('dashboardRecent'); recent.replaceChildren();
+    if (!cachedDocuments.length) { const empty=document.createElement('div');empty.className='empty-state';empty.innerHTML='<div class="empty-icon" aria-hidden="true">▤</div><h3>No documents yet</h3><p>Create your first document to see it here.</p>';recent.appendChild(empty);return; }
+    const table=makeDocumentTable(cachedDocuments.slice(0,5),false); recent.appendChild(table);
+  } catch(error) { showToast(`Could not load dashboard: ${error.message}`); }
+}
+
+function makeDocumentTable(docs, includeType = true) {
+  const wrap=document.createElement('div');wrap.className='responsive-table-wrap';
+  const table=document.createElement('table');table.className='data-table';
+  const headers=['Document','Customer',...(includeType?['Type']:[]),'Date','Amount','Status','Actions'];
+  const thead=document.createElement('thead'),headRow=document.createElement('tr');
+  headers.forEach(label=>{const th=document.createElement('th');th.textContent=label;headRow.appendChild(th);});thead.appendChild(headRow);table.appendChild(thead);
+  const tbody=document.createElement('tbody');
+  docs.forEach(doc=>{
+    const row=document.createElement('tr');
+    const number=document.createElement('td');number.dataset.label='Document';const numberLink=document.createElement('button');numberLink.className='document-number-link';numberLink.textContent=doc.number || 'Draft';numberLink.onclick=()=>openDocumentById(doc.id);number.appendChild(numberLink);
+    const customer=document.createElement('td');customer.dataset.label='Customer';customer.textContent=doc.client?.name || doc.document?.specific?.supplierName || '—';
+    const cells=[number,customer];
+    if(includeType){const type=document.createElement('td');type.dataset.label='Type';type.textContent=DOCUMENT_TYPES[doc.type]?.title || doc.type;cells.push(type);}
+    const date=document.createElement('td');date.dataset.label='Date';date.textContent=dateForList(doc.document?.date);
+    const amount=document.createElement('td');amount.dataset.label='Amount';amount.textContent=moneyForDocument(doc);
+    const status=document.createElement('td');status.dataset.label='Status';const badge=document.createElement('span');badge.className=`status-badge status-${String(doc.status||'draft').toLowerCase().replaceAll(' ','-')}`;badge.textContent=doc.status||'Draft';status.appendChild(badge);
+    const actions=document.createElement('td');actions.dataset.label='Actions';actions.className='row-table-actions';actions.append(documentActionButton('View',row=>viewDocumentById(row.id),doc),documentActionButton('Edit',row=>openDocumentById(row.id),doc),documentActionButton('Duplicate',duplicateDocument,doc),documentActionButton('Delete',deleteDocumentById,doc));
+    row.append(...cells,date,amount,status,actions);tbody.appendChild(row);
   });
-  if (activeDocumentId) select.value = activeDocumentId;
+  table.appendChild(tbody);wrap.appendChild(table);return wrap;
 }
 
-async function openSelectedDocument() {
-  const id = document.getElementById('savedDocuments').value;
-  if (!id || id === activeDocumentId) return;
+async function renderDocumentTable() {
   try {
-    clearTimeout(autosaveTimer);
-    autosaveTimer = null;
-    await saveDocument(true);
-    const data = await BusinessDB.getDocument(id);
-    if (!data) throw new Error('That document could not be found.');
+    cachedDocuments=await BusinessDB.listDocuments();
+    const filter=document.getElementById('documentTypeFilter');
+    if(filter.options.length===1) Object.keys(DOCUMENT_TYPES).forEach(type=>{const option=document.createElement('option');option.value=type;option.textContent=DOCUMENT_TYPES[type].title;filter.appendChild(option);});
+    const query=(document.getElementById('documentSearch').value||'').trim().toLowerCase(), type=filter.value;
+    const docs=cachedDocuments.filter(doc=>(!type||doc.type===type)&&(!query||[doc.number,doc.client?.name,doc.type,DOCUMENT_TYPES[doc.type]?.title,doc.status].some(value=>String(value||'').toLowerCase().includes(query))));
+    const host=document.getElementById('allDocumentsList');host.replaceChildren();
+    if(!docs.length){const empty=document.createElement('div');empty.className='empty-state';empty.innerHTML='<div class="empty-icon" aria-hidden="true">▤</div><h3>No matching documents</h3><p>Try another search or clear the filters.</p>';host.appendChild(empty);return;}
+    host.appendChild(makeDocumentTable(docs,true));
+  } catch(error){showToast(`Could not load documents: ${error.message}`);}
+}
+
+async function renderCustomers() {
+  try {
+    const [docs,parties]=await Promise.all([BusinessDB.listDocuments(),BusinessDB.getRecords('parties')]);
+    const map=new Map();
+    parties.filter(row=>row.kind==='customer').forEach(row=>map.set(row.id,{name:row.name||'',email:row.email||'',phone:row.phone||'',address:row.address||'',documents:0}));
+    docs.forEach(doc=>{const name=doc.client?.name?.trim();if(!name)return;const key=`customer:${name.toLowerCase()}`;const customer=map.get(key)||{name,email:doc.client.email||'',phone:doc.client.phone||'',address:doc.client.address||'',documents:0};customer.documents++;customer.email ||= doc.client.email||'';customer.phone ||= doc.client.phone||'';customer.address ||= doc.client.address||'';map.set(key,customer);});
+    const host=document.getElementById('customersList');host.replaceChildren();
+    if(!map.size){const empty=document.createElement('div');empty.className='empty-state';empty.innerHTML='<div class="empty-icon" aria-hidden="true">♧</div><h3>No customers yet</h3><p>Customer details will appear here after you save a document.</p>';host.appendChild(empty);return;}
+    const grid=document.createElement('div');grid.className='customer-grid';
+    [...map.values()].sort((a,b)=>a.name.localeCompare(b.name)).forEach(customer=>{const card=document.createElement('article');card.className='customer-card';const avatar=document.createElement('div');avatar.className='customer-avatar';avatar.textContent=(customer.name||'?').slice(0,1).toUpperCase();const name=document.createElement('h3');name.textContent=customer.name||'Unnamed customer';const contact=document.createElement('p');contact.textContent=[customer.email,customer.phone].filter(Boolean).join(' · ')||customer.address||'No contact details';const count=document.createElement('span');count.className='help-text';count.textContent=`${customer.documents} saved document${customer.documents===1?'':'s'}`;card.append(avatar,name,contact,count);grid.appendChild(card);});host.appendChild(grid);
+  } catch(error){showToast(`Could not load customers: ${error.message}`);}
+}
+
+async function openDocumentById(id) {
+  try {
+    if (currentView==='editor') {
+      const saved=await saveDocument(true);
+      if(!saved)throw new Error('Save the current document before opening another.');
+    }
+    const data=await BusinessDB.getDocument(id);
+    if(!data)throw new Error('Document could not be found.');
     await loadDocumentData(data);
-  } catch (error) { showToast(`Could not open document: ${error.message}`); }
+    navigateTo('editor',false);
+  }
+  catch(error){showToast(`Could not open document: ${error.message}`);}
 }
 
-async function deleteCurrentDocument() {
-  if (!activeDocumentId) { showToast('Save this document before deleting it.'); return; }
-  if (!confirm('Delete this document? Its number will not be reused.')) return;
+async function viewDocumentById(id) {
+  await openDocumentById(id);
+  if (currentView==='editor') document.getElementById('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function duplicateDocument(doc) {
   try {
-    await BusinessDB.removeDocument(activeDocumentId);
-    activeDocumentId = null;
+    if (currentView==='editor') {
+      const saved=await saveDocument(true);
+      if(!saved)throw new Error('Save the current document before opening another.');
+    }
+    const copy=structuredClone(doc);delete copy.id;delete copy.number;delete copy.createdAt;delete copy.updatedAt;copy.document={...copy.document,number:''};copy.status=copy.type==='INVOICE'?'Unpaid':'Draft';copy.sourceId=null;copy.sourceNumber=null;
+    copy.document.specific={...(copy.document.specific||{}),amountReceived:'',amountPaid:'',transactionReference:'',paymentDate:''};
+    const created=await BusinessDB.createDocument(copy);
+    await loadDocumentData(created);navigateTo('editor',false);showToast(`Copy ${created.number} created.`);
+  } catch(error){showToast(`Could not duplicate document: ${error.message}`);}
+}
+
+async function deleteDocumentById(doc) {
+  if(!confirm(`Delete ${doc.number}? This action cannot be undone.`))return;
+  try {
+    await BusinessDB.removeDocument(doc.id);
+    if(activeDocumentId===doc.id) {
+      activeDocumentId=null;
+      const remaining=await BusinessDB.listDocuments();
+      if(remaining.length) await loadDocumentData(remaining[0]);
+      else await newDocument(true,'QUOTATION',false);
+    }
+    renderDocumentTable();
+    renderDashboard();
     showToast('Document deleted.');
-    newDocument(true);
-    await refreshDocumentList();
-  } catch (error) { showToast(`Could not delete document: ${error.message}`); }
+  }
+  catch(error){showToast(`Could not delete document: ${error.message}`);}
 }
 
 async function renderDocumentHistory(id) {
   const host = document.getElementById('documentHistory');
-  if (!host || !id) return;
+  if (!host) return;
+  if (!id) { host.replaceChildren(); updateDocumentContextVisibility(); return; }
   const docs = await BusinessDB.listDocuments();
   const active = docs.find(doc => doc.id === id);
-  if (!active) { host.textContent = ''; return; }
+  if (!active) { host.replaceChildren(); updateDocumentContextVisibility(); return; }
   const related = docs.filter(doc => doc.id === active.sourceId || doc.sourceId === id);
   host.replaceChildren();
   if (active.sourceNumber) {
@@ -583,6 +776,13 @@ async function renderDocumentHistory(id) {
     related.forEach((doc,index) => { if(index) line.append(', '); const link=document.createElement('a'); link.textContent=doc.number; link.onclick=()=>openRelatedDocument(doc.id); line.appendChild(link); });
     host.appendChild(line);
   }
+  updateDocumentContextVisibility();
+}
+
+function updateDocumentContextVisibility() {
+  const section=document.getElementById('documentContext');
+  if (!section) return;
+  section.hidden=!document.getElementById('conversionActions').childElementCount && !document.getElementById('documentHistory').childElementCount;
 }
 
 async function openRelatedDocument(id) {
@@ -608,6 +808,7 @@ async function refreshDocumentActions() {
     } catch (error) { console.error(error); }
   }
   actions.forEach(([label, action]) => { const button=document.createElement('button'); button.type='button'; button.className='btn btn-secondary'; button.textContent=label; button.onclick=()=>convertDocument(action); host.appendChild(button); });
+  updateDocumentContextVisibility();
 }
 
 function calculateDocumentTotal(data) {
@@ -673,7 +874,6 @@ async function convertDocument(kind) {
     const created = await BusinessDB.createDocument(converted, createOptions);
     showToast(`${DOCUMENT_TYPES[destination].title} ${created.number} created.`);
     await loadDocumentData(created);
-    await refreshDocumentList();
   } catch (error) { showToast(error.message || 'Could not convert document.'); }
 }
 
@@ -682,7 +882,7 @@ async function exportBackup() {
     const data = await BusinessDB.allData();
     const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
     const url = URL.createObjectURL(blob); const link=document.createElement('a');
-    link.href=url; link.download=`business-documents-${new Date().toISOString().slice(0,10)}.json`; link.click(); URL.revokeObjectURL(url);
+    link.href=url; link.download=`business-backup-${toLocalDateInput(new Date())}.json`; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     showToast('Backup exported.');
   } catch(error) { showToast(`Backup export failed: ${error.message}`); }
 }
@@ -691,45 +891,54 @@ async function importBackup(event) {
   const file=event.target.files?.[0]; if(!file)return;
   try {
     const data=JSON.parse(await file.text());
-    if(!confirm('Restore this backup? Matching record IDs will be replaced.')) return;
-    await BusinessDB.importData(data);
-    await refreshDocumentList();
-    showToast('Backup restored.');
+    if(data?.format!=='business_document_manager'||!Number.isInteger(data.version)||data.version<1||data.version>2||('formatVersion' in data && data.formatVersion!==1)||!data.stores||typeof data.stores!=='object') throw new Error('This file is not a supported business backup.');
+    for(const name of ['companies','parties','documents','lineItems','sequences']) {
+      const rows=data.stores[name];
+      if(!Array.isArray(rows)||rows.some(row=>!row||typeof row!=='object'||!row.id)||new Set(rows.map(row=>row.id)).size!==rows.length) throw new Error(`Backup data for ${name} is missing, invalid or contains duplicate IDs.`);
+    }
+    if(!confirm('Merge records from this backup? Existing records with matching IDs will be kept.')) return;
+    const result=await BusinessDB.importData(data);
+    await Promise.all([renderDashboard(),renderDocumentTable(),renderCustomers()]);
+    showToast(`Backup merged: ${result.inserted} added, ${result.skipped} duplicates skipped.`);
   } catch(error) { showToast(`Backup restore failed: ${error.message}`); }
   finally { event.target.value=''; }
 }
 
 /* ── New Document ──────────────────────────────────────── */
-function newDocument(skipConfirmation = false) {
-  if (!skipConfirmation && !confirm('Start a new document? Unsaved changes to the current one will be lost.')) return;
+async function newDocument(skipConfirmation = false, type = 'QUOTATION', persist = true) {
+  if (!skipConfirmation && currentView==='editor' && !confirm('Start a new document? Unsaved changes to the current one will be lost.')) return;
+  if (!DOCUMENT_TYPES[type]) type='QUOTATION';
   clearTimeout(autosaveTimer);
   autosaveTimer = null;
 
-  document.getElementById('companyName').value = 'IMC Technology';
-  document.getElementById('companyEmail').value = '';
-  document.getElementById('companyPhone').value = '';
-  document.getElementById('companyWebsite').value = '';
-  document.getElementById('companyAddress').value = '';
-  removeLogo();
+  const profile = await loadCompanyProfile().catch(()=>({}));
+  loadingDocument=true;
+  document.getElementById('companyName').value = profile.name || 'IMC Technology';
+  document.getElementById('companyEmail').value = profile.email || '';
+  document.getElementById('companyPhone').value = profile.phone || '';
+  document.getElementById('companyWebsite').value = profile.website || '';
+  document.getElementById('companyAddress').value = profile.address || '';
+  companyLogoData=profile.logo || '';
+  applyLogoPreview();
 
-  document.getElementById('documentType').value = 'QUOTATION';
-  currentDocumentType = 'QUOTATION';
+  document.getElementById('documentType').value = type;
+  currentDocumentType = type;
   activeDocumentId = null;
   activeSourceId = null;
   activeSourceNumber = null;
-  activeStatus = 'Draft';
+  activeStatus = type==='INVOICE' ? 'Unpaid' : 'Draft';
   document.getElementById('documentHistory').replaceChildren();
-  document.getElementById('savedDocuments').selectedIndex = -1;
-  document.title = 'IMC Technology | Quotation Builder';
+  document.title = `IMC Technology | ${DOCUMENT_TYPES[type].title} Builder`;
+  document.querySelector('.page-heading h1').textContent=`New ${DOCUMENT_TYPES[type].title}`;
   documentNumbers = {};
   specificData = {};
   document.getElementById('documentNumber').value = 'Assigning number…';
   const t = new Date();
   document.getElementById('documentDate').value = toLocalDateInput(t);
   const v = new Date(); v.setDate(v.getDate() + 30);
-  specificData.validUntil = toLocalDateInput(v);
-  renderDocumentSpecificFields('QUOTATION', specificData);
-  renderStatusOptions('QUOTATION','Draft');
+  if(type==='QUOTATION') specificData.validUntil = toLocalDateInput(v);
+  renderDocumentSpecificFields(type, specificData);
+  renderStatusOptions(type,activeStatus);
   document.getElementById('currency').value = 'NGN';
 
   document.getElementById('projectName').value = '';
@@ -743,14 +952,20 @@ function newDocument(skipConfirmation = false) {
   document.getElementById('discount').value = 0;
   document.getElementById('tax').value = 0;
   document.getElementById('paymentDetails').value = '';
-  document.getElementById('terms').value = DOCUMENT_TYPES.QUOTATION.terms;
+  document.getElementById('terms').value = DOCUMENT_TYPES[type].terms;
 
   document.getElementById('itemsBody').innerHTML = '';
   addItem(); addItem();
   updatePreview();
-  saveDocument(true);
+  loadingDocument=false;
+  document.getElementById('documentNumber').value=persist?'Assigning number…':'';
+  setSaveStatus(persist?'Unsaved changes':'Saved');
+  if (persist) await saveDocument(true);
   refreshDocumentActions();
-  showToast('New document started.');
+  if (persist) {
+    navigateTo('editor',false);
+    showToast(`${DOCUMENT_TYPES[type].title} started.`);
+  }
 }
 
 /* ── Unload Guard ──────────────────────────────────────── */
@@ -760,3 +975,4 @@ window.addEventListener('beforeunload', () => {
     saveDocument(true);
   }
 });
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&autosaveTimer)saveDocument(true);});

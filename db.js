@@ -171,15 +171,44 @@ const BusinessDB = (() => {
   async function allData() {
     const db = await open(); const result = {};
     for (const name of STORES) result[name] = await requestResult(db.transaction(name).objectStore(name).getAll());
-    return { format:'business_document_manager', version:DB_VERSION, exportedAt:new Date().toISOString(), stores:result };
+    return { format:'business_document_manager', formatVersion:1, version:DB_VERSION, exportedAt:new Date().toISOString(), stores:result };
   }
   async function importData(backup) {
-    if (!backup?.stores || backup.format !== 'business_document_manager') throw new Error('This file is not a valid business document backup.');
+    if (!backup || backup.format !== 'business_document_manager' || !Number.isInteger(backup.version) || backup.version < 1 || backup.version > DB_VERSION || ('formatVersion' in backup && backup.formatVersion !== 1) || !backup.stores || typeof backup.stores !== 'object') throw new Error('This file is not a supported business document backup.');
+    for (const name of STORES) {
+      if (!Array.isArray(backup.stores[name])) throw new Error(`Backup data for ${name} is missing or invalid.`);
+      const ids=new Set();
+      for (const row of backup.stores[name]) {
+        if (!row || typeof row !== 'object' || !row.id || ids.has(row.id)) throw new Error(`Backup contains an invalid or duplicate record in ${name}.`);
+        ids.add(row.id);
+      }
+    }
     const db = await open();
     return new Promise((resolve,reject) => {
       const tx = db.transaction(STORES, 'readwrite');
-      for (const name of STORES) for (const row of backup.stores[name] || []) tx.objectStore(name).put(row);
-      tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error || new Error('Backup restore failed.'));
+      const existing = {};
+      let pending = STORES.length, inserted = 0, skipped = 0, settled = false;
+      const abort = error => { if (settled) return; settled=true; try { tx.abort(); } catch {} reject(error); };
+      tx.onerror=()=>{ if (!settled) { settled=true; reject(tx.error || new Error('Backup merge failed; no records were imported.')); } };
+      tx.onabort=()=>{ if (!settled) { settled=true; reject(tx.error || new Error('Backup merge failed; no records were imported.')); } };
+      tx.oncomplete=()=>{ if (!settled) { settled=true; resolve({ inserted, skipped }); } };
+      for (const name of STORES) {
+        const request=tx.objectStore(name).getAllKeys();
+        request.onsuccess=()=>{
+          existing[name]=new Set(request.result);
+          if (--pending !== 0 || settled) return;
+          try {
+            for (const storeName of STORES) {
+              const store=tx.objectStore(storeName);
+              for (const row of backup.stores[storeName]) {
+                if (existing[storeName].has(row.id)) { skipped++; continue; }
+                store.add(row); inserted++;
+              }
+            }
+          } catch (error) { abort(new Error(`Backup merge failed; no records were imported. ${error.message}`)); }
+        };
+        request.onerror=()=>abort(request.error || new Error('Could not check for duplicate backup records.'));
+      }
     });
   }
   async function migrateLegacy() {

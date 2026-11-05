@@ -9,28 +9,85 @@
 <body>
 
 <header class="app-header">
-  <div>
-    <div class="app-title">IMC Technology</div>
-    <div class="app-subtitle">Quotation & Document Builder</div>
-  </div>
-  <div class="header-actions">
-    <button class="btn btn-danger" onclick="newDocument()">New</button>
-    <button class="btn btn-secondary" onclick="saveDocument(false)">Save</button>
-    <button class="btn btn-secondary" onclick="exportBackup()">Export backup</button>
-    <label class="btn btn-secondary backup-import">Import backup<input type="file" accept="application/json,.json" onchange="importBackup(event)"></label>
-    <button class="btn btn-primary" onclick="window.print()">Print / Save PDF</button>
+  <div class="brand-lockup">
+    <div class="brand-mark" aria-hidden="true">IMC</div>
+    <div>
+      <div class="app-title">IMC Technology</div>
+      <div class="app-subtitle">Quotation & Document Builder</div>
+    </div>
   </div>
 </header>
 
-<main class="page">
-<div class="editor">
+<div class="app-layout">
+<nav class="sidebar" aria-label="Main navigation">
+  <div class="sidebar-label">WORKSPACE</div>
+  <button class="nav-link is-active" data-view="dashboard" aria-label="Dashboard" onclick="navigateTo('dashboard')"><span aria-hidden="true">⌂</span>Dashboard</button>
+  <button class="nav-link" data-view="documents" aria-label="All Documents" onclick="navigateTo('documents')"><span aria-hidden="true">▤</span>All Documents</button>
+  <button class="nav-link" data-view="customers" aria-label="Customers" onclick="navigateTo('customers')"><span aria-hidden="true">♧</span>Customers</button>
+  <div class="sidebar-label sidebar-label-lower">BUSINESS</div>
+  <button class="nav-link" data-view="company" aria-label="Company Profile" onclick="navigateTo('company')"><span aria-hidden="true">▣</span>Company Profile</button>
+  <button class="nav-link" data-view="settings" aria-label="Settings" onclick="navigateTo('settings')"><span aria-hidden="true">⚙</span>Settings</button>
+  <div class="sidebar-foot"><span class="sidebar-status-dot"></span> Your data stays on this device</div>
+</nav>
 
-<section class="section document-library">
-  <div class="section-title">Saved Documents</div>
-  <div class="document-library-row">
-    <div class="field"><label for="savedDocuments">Open a saved document</label><select id="savedDocuments" onchange="openSelectedDocument()"><option value="">Current draft</option></select></div>
-    <button class="btn btn-secondary" type="button" onclick="deleteCurrentDocument()">Delete</button>
+<div class="app-content">
+<section class="route-view dashboard-view" id="dashboardView">
+  <div class="view-heading">
+    <div><div class="eyebrow">OVERVIEW</div><h1>Dashboard</h1><p>Your documents and business activity at a glance.</p></div>
+    <button class="btn btn-primary btn-large" onclick="openNewDocumentDialog()">＋ New Document</button>
   </div>
+  <div class="summary-cards" id="dashboardSummary"></div>
+  <section class="panel dashboard-recent"><div class="panel-heading"><div><h2>Recent documents</h2><p>Your latest saved work</p></div></div><div id="dashboardRecent"></div></section>
+</section>
+
+<section class="route-view" id="documentsView" hidden>
+  <div class="view-heading"><div><div class="eyebrow">DOCUMENTS</div><h1>All Documents</h1><p>View, edit, duplicate or remove your saved documents.</p></div></div>
+  <div class="panel documents-panel"><div class="list-toolbar"><label class="sr-only" for="documentSearch">Search documents</label><input id="documentSearch" type="search" placeholder="Search by number, customer or type" oninput="renderDocumentTable()"><label class="sr-only" for="documentTypeFilter">Filter by document type</label><select id="documentTypeFilter" onchange="renderDocumentTable()"><option value="">All types</option></select></div><div id="allDocumentsList"></div></div>
+</section>
+
+<section class="route-view" id="customersView" hidden>
+  <div class="view-heading"><div><div class="eyebrow">RELATIONSHIPS</div><h1>Customers</h1><p>Customers are collected automatically from your saved documents.</p></div></div>
+  <div class="panel"><div id="customersList"></div></div>
+</section>
+
+<section class="route-view" id="companyView" hidden>
+  <div class="view-heading"><div><div class="eyebrow">BUSINESS</div><h1>Company Profile</h1><p>These details appear on new documents and their previews.</p></div><button class="btn btn-primary" onclick="saveCompanyProfile()">Save profile</button></div>
+  <div class="panel profile-panel"><div class="grid">
+    <div class="field"><label for="profileCompanyName">Company name</label><input id="profileCompanyName"></div>
+    <div class="field"><label for="profileCompanyEmail">Email</label><input id="profileCompanyEmail" type="email"></div>
+    <div class="field"><label for="profileCompanyPhone">Phone / WhatsApp</label><input id="profileCompanyPhone"></div>
+    <div class="field"><label for="profileCompanyWebsite">Website</label><input id="profileCompanyWebsite"></div>
+  </div><div class="field profile-address"><label for="profileCompanyAddress">Address</label><textarea id="profileCompanyAddress"></textarea></div>
+    <div class="field profile-address"><label for="profileCompanyLogo">Company logo</label><input id="profileCompanyLogo" type="file" accept="image/*"><span class="help-text">Optional image, up to 2 MB.</span><img id="profileLogoPreview" class="profile-logo-preview" alt="Company logo preview"></div>
+  </div>
+</section>
+
+<section class="route-view" id="settingsView" hidden>
+  <div class="view-heading"><div><div class="eyebrow">PREFERENCES</div><h1>Settings</h1><p>Manage your local application data and backups.</p></div></div>
+  <div class="panel backup-panel"><div class="panel-heading"><div><h2>Data &amp; Backup</h2><p>Export a copy of your data or merge records from another backup.</p></div></div><div class="backup-actions"><article class="backup-action"><div class="action-icon" aria-hidden="true">↓</div><div><h3>Export Backup</h3><p>Download company profiles, customers, suppliers, documents, line items and numbering sequences as JSON.</p></div><button class="btn btn-secondary" onclick="exportBackup()">Export backup</button></article><article class="backup-action"><div class="action-icon" aria-hidden="true">↑</div><div><h3>Import Backup</h3><p>Merge records from a valid business backup. Existing matching records are kept.</p></div><label class="btn btn-secondary backup-import">Choose backup<input id="backupFile" type="file" accept="application/json,.json" onchange="importBackup(event)"></label></article></div></div>
+</section>
+
+<main class="page" id="workspacePage" hidden>
+<div class="page-heading">
+  <div>
+    <div class="eyebrow">DOCUMENT WORKSPACE</div>
+    <h1>Create a business document</h1>
+    <p>Enter the details, then review the live preview before printing or saving as PDF.</p>
+  </div>
+  <div class="local-badge"><span aria-hidden="true"></span> Saved on this device</div>
+</div>
+<div class="editor">
+<div class="editor-toolbar" aria-label="Document actions">
+  <div class="editor-toolbar-actions">
+    <button class="btn btn-secondary" onclick="showDocumentPreview()"><span aria-hidden="true">◉</span> Preview</button>
+    <button class="btn btn-secondary" onclick="window.print()"><span aria-hidden="true">▧</span> Print / Save PDF</button>
+    <button class="btn btn-primary" onclick="saveDocument(false)"><span aria-hidden="true">✓</span> Save</button>
+  </div>
+  <span class="save-status" id="saveStatus" role="status" aria-live="polite">Saved</span>
+</div>
+
+<section class="section document-context" id="documentContext" hidden>
+  <div class="section-title">Conversions &amp; History</div>
   <div id="conversionActions" class="conversion-actions"></div>
   <div id="documentHistory" class="document-history"></div>
 </section>
@@ -209,7 +266,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
 </div>
 
 <div class="preview">
-<h2 style="text-align:center;">Document Preview</h2>
+<div class="preview-heading"><div><div class="eyebrow">LIVE PREVIEW</div><h2>Document preview</h2></div><span>Print ready</span></div>
 <div class="document" id="documentPreview">
 
 <div class="document-header">
@@ -294,6 +351,17 @@ Work commencement is subject to the agreed payment terms.</textarea>
 </div>
 
 </main>
+</div>
+</div>
+
+<dialog class="new-document-dialog" id="newDocumentDialog">
+  <form method="dialog" id="newDocumentForm">
+    <div class="dialog-heading"><div><div class="eyebrow">GET STARTED</div><h2>New document</h2></div><button class="dialog-close" value="cancel" aria-label="Close">×</button></div>
+    <p>Choose a document type to start with.</p>
+    <div class="field"><label for="newDocumentType">Document type</label><select id="newDocumentType"><option value="QUOTATION">Quotation</option><option value="ESTIMATE">Estimate</option><option value="INVOICE">Invoice</option><option value="PROFORMA INVOICE">Proforma Invoice</option><option value="RECEIPT">Receipt</option><option value="PURCHASE ORDER">Purchase Order</option><option value="CREDIT NOTE">Credit Note</option><option value="DELIVERY NOTE">Delivery Note</option></select></div>
+    <div class="dialog-actions"><button class="btn btn-secondary" value="cancel">Cancel</button><button class="btn btn-primary" type="button" onclick="confirmNewDocument()">Create document</button></div>
+  </form>
+</dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
