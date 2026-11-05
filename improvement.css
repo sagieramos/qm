@@ -438,3 +438,78 @@ input[type="date"] { appearance: none; -webkit-appearance: none; min-width: 0; m
   .notes p { font-size: 8pt; line-height: 1.45; }
   .document-footer { margin-top: 13mm; padding-top: 3mm; font-size: 7.5pt; line-height: 1.4; }
 }
+
+/* Shared document and approval layout for screen preview and print output. */
+.scope-list { margin: 0; padding-left: 18px; }
+.scope-list li { padding-left: 2px; margin: 0 0 5px; line-height: 1.55; break-inside: avoid; page-break-inside: avoid; }
+.scope-list li:last-child { margin-bottom: 0; }
+.scope-list .scope-subsection { list-style: none; margin: 8px 0 3px -18px; color: #243b30; }
+.approval-section { margin-top: 22px; padding: 14px 16px; border: 1px solid #dfe7e2; border-radius: 5px; break-inside: avoid; page-break-inside: avoid; }
+.approval-section[hidden] { display: none !important; }
+.approval-heading { margin-bottom: 12px; color: #263a30; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.approval-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+.approval-party { min-width: 0; }
+.approval-role { margin-bottom: 3px; color: #748078; font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.approval-signer { min-height: 16px; overflow-wrap: anywhere; color: #293a31; font-size: 9px; font-weight: 700; }
+.approval-line { min-height: 21px; margin-top: 18px; padding-top: 4px; border-top: 1px solid #87948c; color: #77837c; font-size: 7px; }
+.approval-date-line { width: 55%; margin-top: 10px; }
+.approval-section .document-authorized-signature { width: 100%; margin: 0; }
+.approval-section .document-signature-visual { height: 38px; }
+.approval-section .document-signature-visual img { max-height: 36px; }
+.approval-section .document-signature-line { display: none; }
+.document-footer { color: #77837c; }
+.document-total-row[hidden] { display: none !important; }
+
+@media (max-width: 700px) {
+  .approval-grid { grid-template-columns: 1fr; gap: 18px; }
+}
+
+@media print {
+  .document { overflow: visible; }
+  .document-header, .document-info, .document-specific-info, .document-totals,
+  .notes, .approval-section, .document-footer { break-inside: avoid-page; page-break-inside: avoid; }
+  .document-header { gap: 8mm; }
+  .company-name { font-size: 22pt; }
+  .company-tagline { max-width: 85mm; }
+  .company-contact { gap: .7mm; margin-top: 2mm; font-size: 7.5pt; line-height: 1.3; }
+  .document-type { font-size: 18pt; }
+  .document-info { gap: 8mm; margin: 7mm 0; }
+  .info-value { overflow-wrap: anywhere; }
+  .scope-box { margin-top: 5mm; padding: 3.5mm 4mm; }
+  .scope-list { padding-left: 4mm; }
+  .scope-list li { margin-bottom: 1.3mm; line-height: 1.4; }
+  .scope-list .scope-subsection { margin: 2mm 0 .8mm -4mm; }
+  .document-table { margin-top: 5mm; break-after: avoid-page; page-break-after: avoid; }
+  .document-table thead { display: table-header-group; }
+  .document-table tr { break-inside: avoid-page; page-break-inside: avoid; }
+  .document-table th:first-child, .document-table td:first-child { width: 5%; }
+  .document-table th:nth-child(2), .document-table td:nth-child(2) { width: 50%; }
+  .document-table th:nth-child(3), .document-table td:nth-child(3) { width: 10%; text-align: right; }
+  .document-table th:nth-child(4), .document-table td:nth-child(4) { width: 12%; text-align: center; }
+  .document-table th:last-child, .document-table td:last-child { width: 23%; text-align: right; font-variant-numeric: tabular-nums; }
+  .document-table th { padding: 2.5mm 2mm; }
+  .document-table td { padding: 2.2mm 2mm; line-height: 1.35; }
+  .document-totals { margin-top: 4mm; }
+  .document-total-row { break-inside: avoid-page; padding: 1.2mm 0; font-variant-numeric: tabular-nums; }
+  .document-grand-total { padding: 2mm 2.5mm; border: 0; border-radius: 2px; background: #edf5f0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .notes { margin-top: 7mm; gap: 8mm; }
+  .approval-section { margin-top: 7mm; padding: 3.5mm 4mm; border-radius: 1.5mm; }
+  .approval-grid { gap: 8mm; }
+  .approval-line { min-height: 6mm; margin-top: 5mm; padding-top: 1mm; }
+  .approval-date-line { margin-top: 3mm; }
+  .document-footer { margin-top: 7mm; padding-top: 2mm; }
+}
+
+/* Keep Chrome's print date, page title and file URL out of the document margins. */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+    @top-left { content: ""; }
+    @top-center { content: ""; }
+    @top-right { content: ""; }
+    @bottom-left { content: ""; }
+    @bottom-center { content: ""; }
+    @bottom-right { content: ""; }
+  }
+}

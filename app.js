@@ -386,6 +386,8 @@ function calculateTotals() {
   setPreviewCurrency('previewDiscount',discount);
   setPreviewCurrency('previewTax',tax);
   setPreviewCurrency('previewGrandTotal',total);
+  document.getElementById('previewDiscountRow').hidden=discount===0;
+  document.getElementById('previewTaxRow').hidden=tax===0;
   reconcileInvoicePaymentStatus(total);
 }
 
@@ -461,8 +463,6 @@ function updatePreview() {
   document.getElementById('previewCompanyWebsite').hidden=!companyWebsite;
   document.getElementById('previewCompanyAddress').textContent = companyAddress;
   document.getElementById('previewCompanyAddress').hidden=!companyAddress;
-  document.getElementById('previewFooterCompanyName').textContent=get('companyName').trim() || 'Business';
-
   const type = get('documentType');
   const config = DOCUMENT_TYPES[type] || DOCUMENT_TYPES.QUOTATION;
   document.getElementById('previewPdfCurrencyCode').textContent=`(${get('currency')})`;
@@ -483,7 +483,7 @@ function updatePreview() {
   }
   (SPECIFIC_FIELDS[type] || []).forEach(field => {
     const value = values[field.id];
-    if (!value) return;
+    if (!value || ['acceptanceTerms','creditReason','recipientConfirmation'].includes(field.id)) return;
     const row = document.createElement('div');
     const label = labels[field.id] || field.label;
     row.innerHTML = `<strong>${escapeHtml(label)}:</strong> `;
@@ -500,7 +500,24 @@ function updatePreview() {
 
   document.getElementById('previewProjectName').textContent = get('projectName') || '—';
   const scope=get('scopeOfWork').trim();
-  document.getElementById('previewScopeOfWork').textContent = scope || '—';
+  const scopeHost=document.getElementById('previewScopeOfWork');
+  scopeHost.replaceChildren();
+  if(scope){
+    const list=document.createElement('ul');
+    list.className='scope-list';
+    scope.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).forEach(line=>{
+      const item=document.createElement('li');
+      const text=line.replace(/^(?:[•*-]|\d+[.)])\s*/, '');
+      const subsection=text.match(/^([^:]{2,60}):\s*(.*)$/);
+      if(subsection){
+        const label=document.createElement('strong');label.textContent=subsection[1];item.appendChild(label);
+        if(subsection[2]) item.appendChild(document.createTextNode(`: ${subsection[2]}`));
+        else item.classList.add('scope-subsection');
+      } else item.textContent=text;
+      list.appendChild(item);
+    });
+    scopeHost.appendChild(list);
+  } else scopeHost.textContent='—';
   document.getElementById('previewScopeBlock').hidden=!scope;
 
   document.getElementById('previewClientName').textContent = get('clientName') || '—';
@@ -913,6 +930,14 @@ function renderDocumentSignature(type) {
   const host=document.getElementById('previewAuthorizedSignature');
   if(!host)return;
   host.replaceChildren(); host.hidden=!activeDocumentSignature;
+  const approvalTypes=['QUOTATION','ESTIMATE','PURCHASE ORDER','DELIVERY NOTE'];
+  const approval=document.getElementById('previewApprovalSection');
+  approval.hidden=!approvalTypes.includes(type);
+  document.getElementById('previewPreparedBy').textContent=document.getElementById('companyName').value.trim() || 'Authorized representative';
+  const recipientRole=type==='PURCHASE ORDER'?'Supplier':type==='DELIVERY NOTE'?'Received By':'Customer';
+  document.getElementById('previewCustomerApprovalRole').textContent=recipientRole;
+  document.getElementById('previewCustomerSignatureLabel').textContent=type==='DELIVERY NOTE'?'Recipient signature':`${recipientRole} signature`;
+  document.getElementById('previewCustomerSigner').textContent=(type==='PURCHASE ORDER'?getSpecificValues(type).supplierName:document.getElementById('clientName').value).trim() || `${recipientRole} name`;
   if(!activeDocumentSignature)return;
   const signature=activeDocumentSignature;
   const visual=document.createElement('div');visual.className='document-signature-visual';

@@ -346,7 +346,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
       <th>Description</th>
       <th style="width:10%;">Qty</th>
       <th style="width:12%;">Unit</th>
-      <th style="width:20%;">Amount <span id="previewPdfCurrencyCode" class="print-currency-code">(NGN)</span></th>
+      <th style="width:23%;">Amount <span id="previewPdfCurrencyCode" class="print-currency-code">(NGN)</span></th>
     </tr>
   </thead>
   <tbody id="previewItemsBody"></tbody>
@@ -354,8 +354,8 @@ Work commencement is subject to the agreed payment terms.</textarea>
 
 <div class="document-totals" id="previewTotals">
   <div class="document-total-row"><span>Subtotal</span><strong id="previewSubtotal">0.00</strong></div>
-  <div class="document-total-row"><span>Discount</span><strong id="previewDiscount">0.00</strong></div>
-  <div class="document-total-row"><span>Tax / VAT</span><strong id="previewTax">0.00</strong></div>
+  <div class="document-total-row" id="previewDiscountRow"><span>Discount</span><strong id="previewDiscount">0.00</strong></div>
+  <div class="document-total-row" id="previewTaxRow"><span>Tax / VAT</span><strong id="previewTax">0.00</strong></div>
   <div class="document-total-row document-grand-total"><span>Total</span><strong id="previewGrandTotal">0.00</strong></div>
 </div>
 
@@ -364,12 +364,24 @@ Work commencement is subject to the agreed payment terms.</textarea>
   <div id="previewTermsBlock"><h4>Terms & Conditions</h4><p id="previewTerms"></p></div>
 </div>
 
-<div class="document-footer">
-  <div id="previewAuthorizedSignature" class="document-authorized-signature" hidden></div>
-  <strong id="previewFooterCompanyName">IMC Technology</strong><br>
-  Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions<br>
-  Thank you for your business.
-</div>
+<section class="approval-section" id="previewApprovalSection" hidden aria-label="Approval and signatures">
+  <div class="approval-heading">Approval &amp; Signatures</div>
+  <div class="approval-grid">
+    <div class="approval-party">
+      <div class="approval-role">Prepared By</div>
+      <div class="approval-signer" id="previewPreparedBy"></div>
+      <div id="previewAuthorizedSignature" class="document-authorized-signature" hidden></div>
+      <div class="approval-line">Authorized signature</div>
+      <div class="approval-line approval-date-line">Date</div>
+    </div>
+    <div class="approval-party">
+      <div class="approval-role" id="previewCustomerApprovalRole">Customer</div>
+      <div class="approval-signer" id="previewCustomerSigner"></div>
+      <div class="approval-line" id="previewCustomerSignatureLabel">Customer signature</div>
+      <div class="approval-line approval-date-line">Date</div>
+    </div>
+  </div>
+</section>
 
 </div>
 </div>
