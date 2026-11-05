@@ -382,3 +382,17 @@ input[type="date"] { appearance: none; -webkit-appearance: none; min-width: 0; m
   textarea,
   select { font-size: 16px; }
 }
+
+@media print {
+  .app-header,
+  .sidebar,
+  .route-view,
+  #workspacePage > .page-heading,
+  #workspacePage > .back-btn,
+  #workspacePage > .mobile-tabs,
+  #workspacePage .preview-heading,
+  #workspacePage .editor,
+  .toast { display: none !important; }
+  #workspacePage.page { display: block !important; max-width: none; margin: 0; padding: 0; }
+  #workspacePage .preview { display: block !important; position: static; margin: 0; padding: 0; }
+}
