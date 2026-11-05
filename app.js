@@ -20,6 +20,17 @@ const DOCUMENT_TYPES = {
   'CREDIT NOTE': { title: 'Credit Note', prefix: 'CRN', numberLabel: 'Credit Note No.', terms: 'This credit note should be applied to the referenced invoice.' },
   'DELIVERY NOTE': { title: 'Delivery Note', prefix: 'DN', numberLabel: 'Delivery Note No.', terms: 'Please inspect the items and confirm receipt below.' }
 };
+const DOCUMENT_STATUS_OPTIONS = {
+  'QUOTATION': ['Draft','Issued','Accepted','Rejected','Cancelled','Expired'],
+  'ESTIMATE': ['Draft','Issued','Final','Cancelled'],
+  'INVOICE': ['Draft','Issued','Partially Paid','Paid','Overdue','Cancelled'],
+  'PROFORMA INVOICE': ['Draft','Issued','Cancelled'],
+  'RECEIPT': ['Draft','Issued','Paid','Cancelled'],
+  'PURCHASE ORDER': ['Draft','Issued','Final','Cancelled'],
+  'CREDIT NOTE': ['Draft','Issued','Final','Cancelled'],
+  'DELIVERY NOTE': ['Draft','Issued','Final','Cancelled']
+};
+const DELIVERY_STATUS_OPTIONS = ['Not Sent','Sent','Delivered','Viewed'];
 const SPECIFIC_FIELDS = {
   'QUOTATION': [{ id:'validUntil', label:'Valid Until', type:'date' }, { id:'acceptanceTerms', label:'Acceptance Terms', type:'textarea', placeholder:'e.g. Sign and return to accept this quotation' }],
   'ESTIMATE': [{ id:'completionPeriod', label:'Estimated Completion Period', placeholder:'e.g. 3–4 weeks' }],
@@ -34,6 +45,7 @@ let specificData = {};
 let documentNumbers = {};
 let activeDocumentId = null;
 let activeStatus = 'Draft';
+let activeDeliveryStatus = 'Not Sent';
 let loadingDocument = false;
 let activeSourceId = null;
 let activeSourceNumber = null;
@@ -84,9 +96,11 @@ function onDocumentTypeChange() {
   document.title = `IMC Technology | ${DOCUMENT_TYPES[type]?.title || 'Document'} Builder`;
   if (activeDocumentId) { activeSourceId = activeDocumentId; activeSourceNumber = document.getElementById('documentNumber').value; }
   activeDocumentId = null;
-  activeStatus = type === 'INVOICE' ? 'Unpaid' : 'Draft';
+  activeStatus = 'Draft';
+  activeDeliveryStatus = 'Not Sent';
   document.getElementById('documentNumber').value = 'Assigning number…';
   renderStatusOptions(type, activeStatus);
+  renderDeliveryStatusOptions(activeDeliveryStatus);
   renderDocumentSpecificFields(type, specificData);
   refreshDocumentActions();
   const terms = document.getElementById('terms');
@@ -97,15 +111,109 @@ function onDocumentTypeChange() {
 
 function renderStatusOptions(type, selected = 'Draft') {
   const select = document.getElementById('documentStatus');
-  const values = type === 'QUOTATION' ? ['Draft','Sent','Accepted','Rejected','Expired'] : type === 'INVOICE' ? ['Unpaid','Partially Paid','Paid','Overdue'] : ['Draft','Final'];
+  const values = DOCUMENT_STATUS_OPTIONS[type] || ['Draft','Issued','Cancelled'];
   select.replaceChildren(...values.map(value => { const option = document.createElement('option'); option.value=value; option.textContent=value; return option; }));
   if (!values.includes(selected)) selected = values[0];
   select.value = selected;
   activeStatus = selected;
 }
 
+function normalizeStoredDocumentStatus(data) {
+  const type = data.document?.type || data.type || 'QUOTATION';
+  const previousStatus = data.status || 'Draft';
+  let status = previousStatus;
+  let deliveryStatus = DELIVERY_STATUS_OPTIONS.includes(data.deliveryStatus) ? data.deliveryStatus : 'Not Sent';
+  if (previousStatus === 'Sent') {
+    status = 'Issued';
+    if (!data.deliveryStatus) deliveryStatus = 'Sent';
+  } else if (previousStatus === 'Unpaid') {
+    status = 'Issued';
+  }
+  if (status === 'Final' && !(DOCUMENT_STATUS_OPTIONS[type] || []).includes(status)) status = 'Issued';
+  if (!(DOCUMENT_STATUS_OPTIONS[type] || ['Draft','Issued','Cancelled']).includes(status)) status = 'Draft';
+  return { status, deliveryStatus };
+}
+
 function onDocumentStatusChange() {
-  activeStatus = document.getElementById('documentStatus').value;
+  const selected = document.getElementById('documentStatus').value;
+  if (currentDocumentType === 'INVOICE' && !['Paid','Partially Paid','Overdue','Cancelled'].includes(selected)) {
+    const paid = Number(document.getElementById('amountReceived')?.value) || 0;
+    if (paid > 0) {
+      activeStatus = paid + 0.000001 >= documentTotalFromForm() ? 'Paid' : 'Partially Paid';
+      document.getElementById('documentStatus').value = activeStatus;
+      refreshDocumentActions();
+      updatePreview();
+      return;
+    }
+  }
+  if (currentDocumentType === 'INVOICE' && selected === 'Paid') {
+    const total = documentTotalFromForm();
+    const paid = Number(document.getElementById('amountReceived')?.value) || 0;
+    if (total <= 0 || paid + 0.000001 < total) {
+      document.getElementById('documentStatus').value = activeStatus;
+      showToast('An invoice can be marked Paid only when its full balance is received.');
+      return;
+    }
+  }
+  if (currentDocumentType === 'INVOICE' && selected === 'Partially Paid') {
+    const total = documentTotalFromForm();
+    const paid = Number(document.getElementById('amountReceived')?.value) || 0;
+    if (paid <= 0 || paid + 0.000001 >= total) {
+      document.getElementById('documentStatus').value = activeStatus;
+      showToast('Enter a payment above zero and below the invoice total for a partial payment.');
+      return;
+    }
+  }
+  activeStatus = selected;
+  refreshDocumentActions();
+  updatePreview();
+}
+
+function renderDeliveryStatusOptions(selected = 'Not Sent') {
+  const select = document.getElementById('deliveryStatus');
+  select.replaceChildren(...DELIVERY_STATUS_OPTIONS.map(value => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value;
+    return option;
+  }));
+  if (!DELIVERY_STATUS_OPTIONS.includes(selected)) selected = 'Not Sent';
+  select.value = selected;
+  activeDeliveryStatus = selected;
+}
+
+function onDeliveryStatusChange() {
+  activeDeliveryStatus = document.getElementById('deliveryStatus').value || 'Not Sent';
+  updatePreview();
+}
+
+function documentTotalFromForm() {
+  const subtotal = [...document.querySelectorAll('#itemsBody tr')].reduce((sum,row) => {
+    const quantity = Number(row.querySelector('.quantity').value) || 0;
+    const price = Number(row.querySelector('.price').value) || 0;
+    return sum + quantity * price;
+  },0);
+  return Math.max(0,subtotal-(Number(document.getElementById('discount').value)||0)+(Number(document.getElementById('tax').value)||0));
+}
+
+function syncInvoiceStatusFromPayment() {
+  if (loadingDocument || currentDocumentType !== 'INVOICE' || activeStatus === 'Cancelled') return;
+  const paid = Math.max(0,Number(document.getElementById('amountReceived')?.value)||0);
+  const total = documentTotalFromForm();
+  if (paid > 0) activeStatus = paid + 0.000001 >= total ? 'Paid' : 'Partially Paid';
+  else if (activeStatus === 'Paid' || activeStatus === 'Partially Paid') activeStatus = 'Issued';
+  document.getElementById('documentStatus').value = activeStatus;
+}
+
+function onInvoiceAmountReceivedChange() {
+  syncInvoiceStatusFromPayment();
+  refreshDocumentActions();
+  updatePreview();
+}
+
+function onFinancialInput() {
+  calculateTotals();
+  syncInvoiceStatusFromPayment();
   refreshDocumentActions();
   updatePreview();
 }
@@ -130,8 +238,15 @@ function renderDocumentSpecificFields(type, values = {}) {
     }
     input.id = field.id;
     input.value = values[field.id] ?? (field.id === 'paymentStatus' ? 'Unpaid' : (field.id === 'validUntil' ? document.getElementById('validUntil')?.value || '' : ''));
-    input.addEventListener('input', updatePreview);
-    input.addEventListener('change', updatePreview);
+    if (field.id === 'amountReceived') {
+      input.min = '0';
+      input.step = '0.01';
+      input.addEventListener('input', onInvoiceAmountReceivedChange);
+      input.addEventListener('change', onInvoiceAmountReceivedChange);
+    } else {
+      input.addEventListener('input', updatePreview);
+      input.addEventListener('change', updatePreview);
+    }
     wrapper.append(label, input);
     host.appendChild(wrapper);
   });
@@ -220,6 +335,8 @@ function duplicateItem(btn) {
     row.querySelector('.price').value
   );
   calculateTotals();
+  syncInvoiceStatusFromPayment();
+  refreshDocumentActions();
   updatePreview();
 }
 
@@ -236,6 +353,8 @@ function moveItem(btn, direction) {
 function removeItem(button) {
   button.closest('tr').remove();
   calculateTotals();
+  syncInvoiceStatusFromPayment();
+  refreshDocumentActions();
   updatePreview();
 }
 
@@ -246,6 +365,8 @@ function updateItem(input) {
   const price = parseFloat(row.querySelector('.price').value) || 0;
   row.querySelector('.item-total').textContent = formatCurrency(quantity * price);
   calculateTotals();
+  syncInvoiceStatusFromPayment();
+  refreshDocumentActions();
   updatePreview();
 }
 
@@ -274,11 +395,16 @@ function calculateTotals() {
   document.getElementById('previewDiscount').textContent = formatCurrency(discount);
   document.getElementById('previewTax').textContent = formatCurrency(tax);
   document.getElementById('previewGrandTotal').textContent = formatCurrency(total);
+  document.getElementById('previewSubtotalRow').hidden = discount === 0 && tax === 0;
+  document.getElementById('previewDiscountRow').hidden = discount === 0;
+  document.getElementById('previewTaxRow').hidden = tax === 0;
 }
 
 function onCurrencyChange() {
   refreshAllItemTotals();
   calculateTotals();
+  syncInvoiceStatusFromPayment();
+  refreshDocumentActions();
   scheduleAutosave();
 }
 
@@ -322,6 +448,30 @@ function applyLogoPreview() {
 }
 
 /* ── Preview ───────────────────────────────────────────── */
+function updatePdfStatusDisplay() {
+  const status = String(activeStatus || document.getElementById('documentStatus').value || '').trim();
+  const stamp = document.getElementById('previewStatusStamp');
+  const label = document.getElementById('previewDocumentStatus');
+  const summary = document.getElementById('previewPaymentSummary');
+  const visibleStatuses = {
+    Draft:'draft', Paid:'paid', 'Partially Paid':'partial', Cancelled:'cancelled',
+    Accepted:'accepted', Rejected:'rejected'
+  };
+  const variant = visibleStatuses[status];
+  stamp.hidden = !variant;
+  stamp.className = variant ? `pdf-status-stamp pdf-status--${variant}` : 'pdf-status-stamp';
+  label.textContent = variant ? status.toUpperCase() : '';
+  const partial = status === 'Partially Paid';
+  summary.hidden = !partial;
+  if (partial) {
+    const paid = Math.max(0,Number(document.getElementById('amountReceived')?.value)||0);
+    const balance = Math.max(0,documentTotalFromForm()-paid);
+    summary.textContent = `Paid ${formatCurrency(paid)} · Outstanding ${formatCurrency(balance)}`;
+  } else {
+    summary.textContent = '';
+  }
+}
+
 function updatePreview() {
   const get = id => document.getElementById(id).value;
 
@@ -330,13 +480,20 @@ function updatePreview() {
   document.getElementById('previewCompanyPhone').textContent = get('companyPhone');
   document.getElementById('previewCompanyWebsite').textContent = get('companyWebsite');
   document.getElementById('previewCompanyAddress').textContent = get('companyAddress');
+  document.getElementById('previewCompanyEmailRow').hidden = !get('companyEmail').trim();
+  document.getElementById('previewCompanyPhoneRow').hidden = !get('companyPhone').trim();
+  document.getElementById('previewCompanyAddress').hidden = !get('companyAddress').trim();
+  document.getElementById('previewCompanyWebsite').hidden = !get('companyWebsite').trim();
+  document.getElementById('previewCompanyContact').hidden = ![
+    get('companyEmail'), get('companyPhone'), get('companyAddress'), get('companyWebsite')
+  ].some(value => value.trim());
 
   const type = get('documentType');
   const config = DOCUMENT_TYPES[type] || DOCUMENT_TYPES.QUOTATION;
   document.getElementById('previewDocumentType').textContent = config.title.toUpperCase();
   document.getElementById('previewNumberLabel').textContent = config.numberLabel;
   document.getElementById('previewDocumentNumber').textContent = get('documentNumber');
-  document.getElementById('previewDocumentStatus').textContent = activeStatus || get('documentStatus');
+  updatePdfStatusDisplay();
   document.getElementById('previewDocumentDate').textContent = formatDate(get('documentDate'));
   const metaRows = document.getElementById('previewMetaRows');
   metaRows.replaceChildren();
@@ -348,6 +505,7 @@ function updatePreview() {
     metaRows.appendChild(sourceRow);
   }
   (SPECIFIC_FIELDS[type] || []).forEach(field => {
+    if (field.id === 'amountReceived' && activeStatus === 'Partially Paid') return;
     const value = values[field.id];
     if (!value) return;
     const row = document.createElement('div');
@@ -357,22 +515,35 @@ function updatePreview() {
     metaRows.appendChild(row);
   });
 
-  document.getElementById('previewProjectName').textContent = get('projectName') || '—';
-  document.getElementById('previewScopeOfWork').textContent = get('scopeOfWork') || '—';
+  document.getElementById('previewProjectName').textContent = get('projectName');
+  document.getElementById('previewScopeOfWork').textContent = get('scopeOfWork');
 
-  document.getElementById('previewClientName').textContent = get('clientName') || '—';
+  document.getElementById('previewClientName').textContent = get('clientName');
   document.getElementById('previewClientAddress').textContent = get('clientAddress');
   document.getElementById('previewClientPhone').textContent = get('clientPhone');
   document.getElementById('previewClientEmail').textContent = get('clientEmail');
 
-  document.getElementById('previewPaymentDetails').textContent = get('paymentDetails') || '—';
-  document.getElementById('previewTerms').textContent = get('terms') || '—';
+  document.getElementById('previewPaymentDetails').textContent = get('paymentDetails');
+  document.getElementById('previewTerms').textContent = get('terms');
   const infoTitles = document.querySelectorAll('.document-info .info-title');
   infoTitles[0].textContent = type === 'PURCHASE ORDER' ? 'Supplier' : 'Bill To';
   infoTitles[1].textContent = type === 'PURCHASE ORDER' ? 'Delivery Address' : 'Service / Project';
   if (type === 'PURCHASE ORDER' && values.supplierName) document.getElementById('previewClientName').textContent = values.supplierName;
   if (type === 'PURCHASE ORDER' && values.supplierAddress) document.getElementById('previewClientAddress').textContent = values.supplierAddress;
   if (type === 'PURCHASE ORDER' && values.deliveryAddress) document.getElementById('previewProjectName').textContent = values.deliveryAddress;
+  document.getElementById('previewClientAddress').hidden = !document.getElementById('previewClientAddress').textContent.trim();
+  document.getElementById('previewClientPhone').hidden = !document.getElementById('previewClientPhone').textContent.trim();
+  document.getElementById('previewClientEmail').hidden = !document.getElementById('previewClientEmail').textContent.trim();
+  document.getElementById('previewClientBlock').hidden = ![
+    document.getElementById('previewClientName').textContent,
+    document.getElementById('previewClientAddress').textContent,
+    document.getElementById('previewClientPhone').textContent,
+    document.getElementById('previewClientEmail').textContent
+  ].some(value => value.trim());
+  document.getElementById('previewProjectBlock').hidden = !document.getElementById('previewProjectName').textContent.trim();
+  document.getElementById('previewClientProjectInfo').hidden =
+    document.getElementById('previewClientBlock').hidden && document.getElementById('previewProjectBlock').hidden;
+  document.getElementById('previewScopeBox').hidden = !get('scopeOfWork').trim();
   const supplemental = document.getElementById('previewSpecificInfo');
   supplemental.replaceChildren();
   const supplementalFields = { acceptanceTerms:'Acceptance Terms', creditReason:'Reason for Credit', recipientConfirmation:'Recipient Confirmation' };
@@ -383,19 +554,26 @@ function updatePreview() {
     supplemental.appendChild(block);
   });
   supplemental.hidden = supplemental.childElementCount === 0;
+  document.getElementById('previewPaymentBlock').hidden = !get('paymentDetails').trim();
+  document.getElementById('previewTermsBlock').hidden = !get('terms').trim();
+  document.getElementById('previewNotes').hidden =
+    document.getElementById('previewPaymentBlock').hidden && document.getElementById('previewTermsBlock').hidden;
 
   const previewBody = document.getElementById('previewItemsBody');
   previewBody.innerHTML = '';
-  document.querySelectorAll('#itemsBody tr').forEach((row, index) => {
+  let itemCount = 0;
+  document.querySelectorAll('#itemsBody tr').forEach(row => {
     const description = row.querySelector('.description').value;
     const quantity = parseFloat(row.querySelector('.quantity').value) || 0;
     const unit = row.querySelector('.unit').value;
     const price = parseFloat(row.querySelector('.price').value) || 0;
     const amount = quantity * price;
+    if (!description.trim() && amount === 0) return;
     const previewRow = document.createElement('tr');
-    previewRow.innerHTML = `<td>${index + 1}</td><td>${escapeHtml(description)}</td><td>${quantity}</td><td>${escapeHtml(unit)}</td><td>${formatCurrency(amount)}</td>`;
+    previewRow.innerHTML = `<td>${++itemCount}</td><td>${escapeHtml(description)}</td><td>${quantity}</td><td>${escapeHtml(unit)}</td><td>${formatCurrency(amount)}</td>`;
     previewBody.appendChild(previewRow);
   });
+  document.getElementById('previewItemsTable').hidden = itemCount === 0;
 
   calculateTotals();
   if (!loadingDocument) scheduleAutosave();
@@ -413,6 +591,7 @@ function collectDocumentData() {
   const data = {
     id: activeDocumentId,
     status: document.getElementById('documentStatus').value || activeStatus,
+    deliveryStatus: document.getElementById('deliveryStatus').value || activeDeliveryStatus || 'Not Sent',
     sourceId: activeSourceId,
     sourceNumber: activeSourceNumber,
     company: {
@@ -471,11 +650,13 @@ function saveDocument(silent) {
       activeDocumentId = saved.id;
       currentDocumentType = saved.type;
       activeStatus = saved.status;
+      activeDeliveryStatus = saved.deliveryStatus || 'Not Sent';
       document.getElementById('documentNumber').value = saved.number;
       document.getElementById('previewDocumentNumber').textContent = saved.number;
       document.getElementById('previewDocumentType').textContent = (DOCUMENT_TYPES[saved.type]?.title || saved.type).toUpperCase();
       documentNumbers[saved.type] = saved.number;
       renderStatusOptions(saved.type, saved.status);
+      renderDeliveryStatusOptions(activeDeliveryStatus);
       await renderDocumentHistory(saved.id);
       refreshDocumentActions();
       if (revision === changeRevision) setSaveStatus('Saved');
@@ -528,8 +709,9 @@ async function loadDocumentData(data) {
   document.getElementById('terms').value = data.terms || '';
 
   currentDocumentType = document.getElementById('documentType').value;
-  activeStatus = data.status || (currentDocumentType === 'INVOICE' ? 'Unpaid' : 'Draft');
+  ({ status:activeStatus, deliveryStatus:activeDeliveryStatus } = normalizeStoredDocumentStatus(data));
   renderStatusOptions(currentDocumentType, activeStatus);
+  renderDeliveryStatusOptions(activeDeliveryStatus);
   specificData = { ...(data.document?.specific || {}) };
   if (!specificData.validUntil && data.document?.validUntil) specificData.validUntil = data.document.validUntil;
   documentNumbers = { [currentDocumentType]: data.document?.number || data.number || '' };
@@ -562,6 +744,7 @@ async function loadDocument() {
   applyLogoPreview();
   currentDocumentType = 'QUOTATION';
   renderStatusOptions(currentDocumentType, 'Draft');
+  renderDeliveryStatusOptions('Not Sent');
   const firstExpiry = new Date(); firstExpiry.setDate(firstExpiry.getDate()+30);
   specificData = { validUntil:firstExpiry.toISOString().slice(0,10) };
   renderDocumentSpecificFields(currentDocumentType, specificData);
@@ -668,7 +851,124 @@ function moneyForDocument(doc) {
 }
 
 function dateForList(value) {
-  return value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-NG',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+  if (!value) return '—';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00Z`) : new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}).format(date);
+}
+
+const RECENT_ICONS = {
+  eye:[['path',{d:'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7'}],['circle',{cx:'12',cy:'12',r:'3'}]],
+  pencil:[['path',{d:'M12 20h9'}],['path',{d:'M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z'}]],
+  copy:[['rect',{x:'8',y:'8',width:'14',height:'14',rx:'2'}],['path',{d:'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'}]],
+  'trash-2':[['path',{d:'M3 6h18'}],['path',{d:'M8 6V4h8v2'}],['path',{d:'M19 6l-1 14H6L5 6'}],['path',{d:'M10 11v5M14 11v5'}]]
+};
+
+function createRecentIcon(name) {
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  for (const [key,value] of Object.entries({viewBox:'0 0 24 24',width:'18',height:'18',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'})) svg.setAttribute(key,value);
+  (RECENT_ICONS[name]||[]).forEach(([tag,attrs])=>{
+    const shape=document.createElementNS('http://www.w3.org/2000/svg',tag);
+    Object.entries(attrs).forEach(([key,value])=>shape.setAttribute(key,value));
+    svg.appendChild(shape);
+  });
+  return svg;
+}
+
+function createRecentAction(doc,label,icon,action) {
+  const button=document.createElement('button');
+  button.type='button'; button.className=`recent-action recent-action--${icon}`;
+  button.title=label; button.setAttribute('aria-label',`${label} ${doc.number||'document'}`);
+  button.appendChild(createRecentIcon(icon));
+  button.addEventListener('click',event=>{event.stopPropagation();action(doc);});
+  return button;
+}
+
+function createRecentNumber(doc) {
+  const button=document.createElement('button');
+  button.type='button'; button.className='recent-document-number'; button.textContent=doc.number||'Draft';
+  button.setAttribute('aria-label',`View ${doc.number||'document'} preview`);
+  button.addEventListener('click',event=>{event.stopPropagation();viewDocumentById(doc.id);});
+  return button;
+}
+
+function statusTone(status) {
+  const value=String(status||'Draft').toLowerCase();
+  if (['accepted','paid'].includes(value)) return 'success';
+  if (value==='sent'||value==='issued') return 'blue';
+  if (value==='partially paid') return 'amber';
+  if (['overdue','rejected','cancelled','canceled'].includes(value)) return 'red';
+  return 'neutral';
+}
+
+function createStatusBadge(status, delivery=false) {
+  const label=status||(delivery?'Not Sent':'Draft');
+  const badge=document.createElement('span');
+  badge.className=`document-status-badge ${delivery?'delivery':'document'} status-tone-${statusTone(label)}`;
+  badge.textContent=label;
+  return badge;
+}
+
+function appendStatusPair(host,doc) {
+  const state=normalizeStoredDocumentStatus(doc);
+  const documentLine=document.createElement('div');
+  documentLine.className='status-pair-line';
+  const documentLabel=document.createElement('span');documentLabel.className='status-pair-label';documentLabel.textContent='Document';
+  documentLine.append(documentLabel,createStatusBadge(state.status));
+  const deliveryLine=document.createElement('div');
+  deliveryLine.className='status-pair-line';
+  const deliveryLabel=document.createElement('span');deliveryLabel.className='status-pair-label';deliveryLabel.textContent='Delivery';
+  deliveryLine.append(deliveryLabel,createStatusBadge(state.deliveryStatus,true));
+  host.append(documentLine,deliveryLine);
+}
+
+function makeRecentDocuments(docs) {
+  const root=document.createElement('div'); root.className='recent-documents';
+  const wrap=document.createElement('div'); wrap.className='recent-table-wrap';
+  const table=document.createElement('table'); table.className='recent-table';
+  const caption=document.createElement('caption'); caption.className='sr-only'; caption.textContent='Most recently updated documents'; table.appendChild(caption);
+  const head=document.createElement('thead'), headRow=document.createElement('tr');
+  ['Document','Customer','Date','Amount','Status','Actions'].forEach(text=>{const th=document.createElement('th');th.scope='col';th.textContent=text;headRow.appendChild(th);});
+  head.appendChild(headRow); table.appendChild(head);
+  const body=document.createElement('tbody'), cards=document.createElement('div'); cards.className='recent-cards';
+  docs.forEach(doc=>{
+    const state=normalizeStoredDocumentStatus(doc);
+    const name=doc.client?.name?.trim()||doc.document?.specific?.supplierName?.trim()||'—';
+    const type=DOCUMENT_TYPES[doc.type]?.title||doc.type||'Document';
+    const row=document.createElement('tr');
+    const documentCell=document.createElement('td'); documentCell.append(createRecentNumber(doc));
+    const typeLabel=document.createElement('span'); typeLabel.className='recent-document-type'; typeLabel.textContent=type; documentCell.appendChild(typeLabel); row.appendChild(documentCell);
+    const cells=[name,dateForList(doc.document?.date),moneyForDocument(doc)];
+    cells.forEach((value,index)=>{const cell=document.createElement('td');cell.textContent=value;cell.dataset.label=['Customer','Date','Amount'][index];if(index===2)cell.className='recent-amount';row.appendChild(cell);});
+    const status=document.createElement('td'); status.dataset.label='Status'; status.className='recent-status-cell';
+    appendStatusPair(status,doc);row.appendChild(status);
+    const actions=document.createElement('td');actions.dataset.label='Actions';actions.className='recent-actions';
+    actions.append(createRecentAction(doc,'View','eye',viewDocumentById),createRecentAction(doc,'Edit','pencil',openDocumentById),createRecentAction(doc,'Duplicate','copy',duplicateDocument),createRecentAction(doc,'Delete','trash-2',deleteDocumentById));
+    row.appendChild(actions);body.appendChild(row);
+
+    const card=document.createElement('article');card.className='recent-card';
+    const cardHeader=document.createElement('div');cardHeader.className='recent-card-header';
+    const cardDoc=document.createElement('div');cardDoc.className='recent-card-document';cardDoc.append(createRecentNumber(doc));
+    const cardType=document.createElement('span');cardType.className='recent-document-type';cardType.textContent=type;cardDoc.appendChild(cardType);
+    cardHeader.append(cardDoc,createStatusBadge(state.status));
+    const details=document.createElement('dl');details.className='recent-card-details';
+    [['Customer',name],['Date',dateForList(doc.document?.date)],['Amount',moneyForDocument(doc)],['Delivery',state.deliveryStatus]].forEach(([label,value])=>{
+      const line=document.createElement('div'),term=document.createElement('dt'),detail=document.createElement('dd');
+      term.textContent=label;detail.textContent=value;if(label==='Amount')detail.className='recent-amount';line.append(term,detail);details.appendChild(line);
+    });
+    const cardActions=document.createElement('div');cardActions.className='recent-actions recent-card-actions';
+    cardActions.append(createRecentAction(doc,'View','eye',viewDocumentById),createRecentAction(doc,'Edit','pencil',openDocumentById),createRecentAction(doc,'Duplicate','copy',duplicateDocument),createRecentAction(doc,'Delete','trash-2',deleteDocumentById));
+    card.append(cardHeader,details,cardActions);cards.appendChild(card);
+  });
+  table.appendChild(body);wrap.appendChild(table);root.append(wrap,cards);return root;
+}
+
+function setRecentState(host,state,message='') {
+  host.replaceChildren();
+  const panel=document.createElement('div');panel.className=`recent-state recent-${state}`;
+  if(state==='loading') {panel.setAttribute('role','status');panel.textContent='Loading recent documents…';}
+  else if(state==='empty') {const title=document.createElement('h3'),detail=document.createElement('p');title.textContent='No documents yet';detail.textContent='Create your first document to see it here.';panel.append(title,detail);}
+  else {const detail=document.createElement('p'),retry=document.createElement('button');detail.textContent=message||'Recent documents could not be loaded.';retry.type='button';retry.className='recent-retry';retry.textContent='Try again';retry.addEventListener('click',renderDashboard);panel.append(detail,retry);}
+  host.appendChild(panel);
 }
 
 function documentActionButton(label, action, doc) {
@@ -677,17 +977,24 @@ function documentActionButton(label, action, doc) {
 }
 
 async function renderDashboard() {
+  const recent=document.getElementById('dashboardRecent');
+  recent.setAttribute('aria-busy','true');
+  setRecentState(recent,'loading');
   try {
-    cachedDocuments=await BusinessDB.listDocuments();
-    const parties=await BusinessDB.getRecords('parties');
+    const [documents,parties]=await Promise.all([BusinessDB.listDocuments(),BusinessDB.getRecords('parties')]);
+    cachedDocuments=documents.sort((a,b)=>(Date.parse(b.updatedAt||'')||0)-(Date.parse(a.updatedAt||'')||0));
     const customers=new Set(cachedDocuments.map(doc=>doc.client?.name?.trim()).filter(Boolean));
-    const summary=[['Documents',cachedDocuments.length,'Across all document types'],['Customers',Math.max(customers.size,parties.filter(row=>row.kind==='customer').length),'From saved records'],['Open invoices',cachedDocuments.filter(doc=>doc.type==='INVOICE'&&doc.status!=='Paid').length,'Awaiting payment'],['Purchase orders',cachedDocuments.filter(doc=>doc.type==='PURCHASE ORDER').length,'Supplier orders']];
+    const summary=[['Documents',cachedDocuments.length,'Across all document types'],['Customers',Math.max(customers.size,parties.filter(row=>row.kind==='customer').length),'From saved records'],['Open invoices',cachedDocuments.filter(doc=>doc.type==='INVOICE'&&['Issued','Partially Paid','Overdue'].includes(normalizeStoredDocumentStatus(doc).status)).length,'Awaiting payment'],['Purchase orders',cachedDocuments.filter(doc=>doc.type==='PURCHASE ORDER').length,'Supplier orders']];
     const host=document.getElementById('dashboardSummary'); host.replaceChildren();
     summary.forEach(([title,value,caption])=>{const card=document.createElement('article');card.className='summary-card';const name=document.createElement('div');name.className='summary-label';name.textContent=title;const amount=document.createElement('strong');amount.textContent=value;const note=document.createElement('span');note.textContent=caption;card.append(name,amount,note);host.appendChild(card);});
-    const recent=document.getElementById('dashboardRecent'); recent.replaceChildren();
-    if (!cachedDocuments.length) { const empty=document.createElement('div');empty.className='empty-state';empty.innerHTML='<div class="empty-icon" aria-hidden="true">▤</div><h3>No documents yet</h3><p>Create your first document to see it here.</p>';recent.appendChild(empty);return; }
-    const table=makeDocumentTable(cachedDocuments.slice(0,5),false); recent.appendChild(table);
-  } catch(error) { showToast(`Could not load dashboard: ${error.message}`); }
+    if (!cachedDocuments.length) setRecentState(recent,'empty');
+    else recent.appendChild(makeRecentDocuments(cachedDocuments.slice(0,5)));
+  } catch(error) {
+    setRecentState(recent,'error',`Recent documents could not be loaded: ${error.message}`);
+    showToast(`Could not load dashboard: ${error.message}`);
+  } finally {
+    recent.setAttribute('aria-busy','false');
+  }
 }
 
 function makeDocumentTable(docs, includeType = true) {
@@ -705,7 +1012,7 @@ function makeDocumentTable(docs, includeType = true) {
     if(includeType){const type=document.createElement('td');type.dataset.label='Type';type.textContent=DOCUMENT_TYPES[doc.type]?.title || doc.type;cells.push(type);}
     const date=document.createElement('td');date.dataset.label='Date';date.textContent=dateForList(doc.document?.date);
     const amount=document.createElement('td');amount.dataset.label='Amount';amount.textContent=moneyForDocument(doc);
-    const status=document.createElement('td');status.dataset.label='Status';const badge=document.createElement('span');badge.className=`status-badge status-${String(doc.status||'draft').toLowerCase().replaceAll(' ','-')}`;badge.textContent=doc.status||'Draft';status.appendChild(badge);
+    const status=document.createElement('td');status.dataset.label='Status';status.className='status-pair';appendStatusPair(status,doc);
     const actions=document.createElement('td');actions.dataset.label='Actions';actions.className='row-table-actions';actions.append(documentActionButton('View',row=>viewDocumentById(row.id),doc),documentActionButton('Edit',row=>openDocumentById(row.id),doc),documentActionButton('Duplicate',duplicateDocument,doc),documentActionButton('Delete',deleteDocumentById,doc));
     row.append(...cells,date,amount,status,actions);tbody.appendChild(row);
   });
@@ -718,7 +1025,11 @@ async function renderDocumentTable() {
     const filter=document.getElementById('documentTypeFilter');
     if(filter.options.length===1) Object.keys(DOCUMENT_TYPES).forEach(type=>{const option=document.createElement('option');option.value=type;option.textContent=DOCUMENT_TYPES[type].title;filter.appendChild(option);});
     const query=(document.getElementById('documentSearch').value||'').trim().toLowerCase(), type=filter.value;
-    const docs=cachedDocuments.filter(doc=>(!type||doc.type===type)&&(!query||[doc.number,doc.client?.name,doc.type,DOCUMENT_TYPES[doc.type]?.title,doc.status].some(value=>String(value||'').toLowerCase().includes(query))));
+    const statusFilter=document.getElementById('documentStatusFilter').value;
+    const docs=cachedDocuments.filter(doc=>{
+      const status=normalizeStoredDocumentStatus(doc).status;
+      return (!type||doc.type===type)&&(!statusFilter||status===statusFilter)&&(!query||[doc.number,doc.client?.name,doc.type,DOCUMENT_TYPES[doc.type]?.title,status,normalizeStoredDocumentStatus(doc).deliveryStatus].some(value=>String(value||'').toLowerCase().includes(query)));
+    });
     const host=document.getElementById('allDocumentsList');host.replaceChildren();
     if(!docs.length){const empty=document.createElement('div');empty.className='empty-state';empty.innerHTML='<div class="empty-icon" aria-hidden="true">▤</div><h3>No matching documents</h3><p>Try another search or clear the filters.</p>';host.appendChild(empty);return;}
     host.appendChild(makeDocumentTable(docs,true));
@@ -766,7 +1077,7 @@ async function duplicateDocument(doc) {
       const saved=await saveDocument(true);
       if(!saved)throw new Error('Save the current document before opening another.');
     }
-    const copy=structuredClone(doc);delete copy.id;delete copy.number;delete copy.createdAt;delete copy.updatedAt;copy.document={...copy.document,number:''};copy.status=copy.type==='INVOICE'?'Unpaid':'Draft';copy.sourceId=null;copy.sourceNumber=null;
+    const copy=structuredClone(doc);delete copy.id;delete copy.number;delete copy.createdAt;delete copy.updatedAt;copy.document={...copy.document,number:''};copy.status='Draft';copy.deliveryStatus='Not Sent';copy.sourceId=null;copy.sourceNumber=null;
     copy.document.specific={...(copy.document.specific||{}),amountReceived:'',amountPaid:'',transactionReference:'',paymentDate:''};
     const created=await BusinessDB.createDocument(copy);
     await loadDocumentData(created);navigateTo('editor',false);showToast(`Copy ${created.number} created.`);
@@ -869,7 +1180,8 @@ async function convertDocument(kind) {
     delete converted.id; delete converted.number; delete converted.createdAt; delete converted.updatedAt; delete converted.items;
     converted.document = { ...converted.document, type:destination, number:'', specific:{ ...(converted.document?.specific || {}) } };
     converted.type = destination; converted.sourceId = source.id; converted.sourceNumber = source.number;
-    converted.status = destination === 'INVOICE' ? 'Unpaid' : 'Draft';
+    converted.status = 'Draft';
+    converted.deliveryStatus = 'Not Sent';
     let sourceUpdate = null;
     if (kind === 'receipt') {
       const paidSoFar = Number(source.document?.specific?.amountReceived) || 0;
@@ -925,7 +1237,7 @@ async function importBackup(event) {
   const file=event.target.files?.[0]; if(!file)return;
   try {
     const data=JSON.parse(await file.text());
-    if(data?.format!=='business_document_manager'||!Number.isInteger(data.version)||data.version<1||data.version>2||('formatVersion' in data && data.formatVersion!==1)||!data.stores||typeof data.stores!=='object') throw new Error('This file is not a supported business backup.');
+    if(data?.format!=='business_document_manager'||!Number.isInteger(data.version)||data.version<1||data.version>3||('formatVersion' in data && data.formatVersion!==1)||!data.stores||typeof data.stores!=='object') throw new Error('This file is not a supported business backup.');
     for(const name of ['companies','parties','documents','lineItems','sequences']) {
       const rows=data.stores[name];
       if(!Array.isArray(rows)||rows.some(row=>!row||typeof row!=='object'||!row.id)||new Set(rows.map(row=>row.id)).size!==rows.length) throw new Error(`Backup data for ${name} is missing, invalid or contains duplicate IDs.`);
@@ -960,7 +1272,8 @@ async function newDocument(skipConfirmation = false, type = 'QUOTATION', persist
   activeDocumentId = null;
   activeSourceId = null;
   activeSourceNumber = null;
-  activeStatus = type==='INVOICE' ? 'Unpaid' : 'Draft';
+  activeStatus = 'Draft';
+  activeDeliveryStatus = 'Not Sent';
   document.getElementById('documentHistory').replaceChildren();
   document.title = `IMC Technology | ${DOCUMENT_TYPES[type].title} Builder`;
   document.querySelector('.page-heading h1').textContent=`New ${DOCUMENT_TYPES[type].title}`;
@@ -973,6 +1286,7 @@ async function newDocument(skipConfirmation = false, type = 'QUOTATION', persist
   if(type==='QUOTATION') specificData.validUntil = toLocalDateInput(v);
   renderDocumentSpecificFields(type, specificData);
   renderStatusOptions(type,activeStatus);
+  renderDeliveryStatusOptions(activeDeliveryStatus);
   document.getElementById('currency').value = 'NGN';
 
   document.getElementById('projectName').value = '';

@@ -38,12 +38,18 @@
     <button class="btn btn-primary btn-large" onclick="openNewDocumentDialog()">＋ New Document</button>
   </div>
   <div class="summary-cards" id="dashboardSummary"></div>
-  <section class="panel dashboard-recent"><div class="panel-heading"><div><h2>Recent documents</h2><p>Your latest saved work</p></div></div><div id="dashboardRecent"></div></section>
+  <section class="panel dashboard-recent">
+    <div class="panel-heading recent-heading">
+      <div><h2>Recent documents</h2><p>Your latest saved work</p></div>
+      <button class="recent-view-all" type="button" onclick="navigateTo('documents')">View all <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+    </div>
+    <div id="dashboardRecent" aria-live="polite" aria-busy="false"></div>
+  </section>
 </section>
 
 <section class="route-view" id="documentsView" hidden>
   <div class="view-heading"><div><div class="eyebrow">DOCUMENTS</div><h1>All Documents</h1><p>View, edit, duplicate or remove your saved documents.</p></div></div>
-  <div class="panel documents-panel"><div class="list-toolbar"><label class="sr-only" for="documentSearch">Search documents</label><input id="documentSearch" type="search" placeholder="Search by number, customer or type" oninput="renderDocumentTable()"><label class="sr-only" for="documentTypeFilter">Filter by document type</label><select id="documentTypeFilter" onchange="renderDocumentTable()"><option value="">All types</option></select></div><div id="allDocumentsList"></div></div>
+  <div class="panel documents-panel"><div class="list-toolbar"><label class="sr-only" for="documentSearch">Search documents</label><input id="documentSearch" type="search" placeholder="Search by number, customer or type" oninput="renderDocumentTable()"><label class="sr-only" for="documentTypeFilter">Filter by document type</label><select id="documentTypeFilter" onchange="renderDocumentTable()"><option value="">All types</option></select><label class="sr-only" for="documentStatusFilter">Filter by document status</label><select id="documentStatusFilter" onchange="renderDocumentTable()"><option value="">All document statuses</option><option>Draft</option><option>Issued</option><option>Accepted</option><option>Rejected</option><option>Partially Paid</option><option>Paid</option><option>Overdue</option><option>Cancelled</option><option>Expired</option><option>Final</option></select></div><div id="allDocumentsList"></div></div>
 </section>
 
 <section class="route-view" id="customersView" hidden>
@@ -149,8 +155,12 @@
       </select>
     </div>
     <div class="field">
-      <label for="documentStatus">Status</label>
+      <label for="documentStatus">Document status</label>
       <select id="documentStatus" onchange="onDocumentStatusChange()"></select>
+    </div>
+    <div class="field">
+      <label for="deliveryStatus">Delivery status</label>
+      <select id="deliveryStatus" onchange="onDeliveryStatusChange()"></select>
     </div>
     <div class="field">
       <label for="documentNumber">Document Number</label>
@@ -240,11 +250,11 @@
     </div>
     <div class="total-row">
       <label for="discount">Discount</label>
-      <input id="discount" type="number" value="0" min="0" oninput="calculateTotals()">
+      <input id="discount" type="number" value="0" min="0" oninput="onFinancialInput()">
     </div>
     <div class="total-row">
       <label for="tax">Tax / VAT</label>
-      <input id="tax" type="number" value="0" min="0" oninput="calculateTotals()">
+      <input id="tax" type="number" value="0" min="0" oninput="onFinancialInput()">
     </div>
     <div class="total-row grand-total">
       <span>Total</span>
@@ -280,16 +290,19 @@ Work commencement is subject to the agreed payment terms.</textarea>
     <img id="previewCompanyLogo" class="preview-logo" alt="Company logo">
     <div class="company-name" id="previewCompanyName">IMC Technology</div>
     <div class="company-tagline">Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions</div>
-    <div class="company-contact">
+    <div class="company-contact" id="previewCompanyContact">
       <div id="previewCompanyAddress"></div>
-      <div>Email: <span id="previewCompanyEmail"></span></div>
-      <div>Phone: <span id="previewCompanyPhone"></span></div>
+      <div id="previewCompanyEmailRow">Email: <span id="previewCompanyEmail"></span></div>
+      <div id="previewCompanyPhoneRow">Phone: <span id="previewCompanyPhone"></span></div>
       <div id="previewCompanyWebsite"></div>
     </div>
   </div>
   <div>
     <div class="document-type" id="previewDocumentType">QUOTATION</div>
-    <div id="previewDocumentStatus" class="preview-status">Draft</div>
+    <div id="previewStatusStamp" class="pdf-status-stamp" hidden>
+      <span id="previewDocumentStatus"></span>
+      <span id="previewPaymentSummary" hidden></span>
+    </div>
 <div class="document-number">
       <strong id="previewNumberLabel">Quotation No.:</strong> <span id="previewDocumentNumber">QUO-2026-0001</span><br>
       <strong>Date:</strong> <span id="previewDocumentDate"></span>
@@ -298,17 +311,17 @@ Work commencement is subject to the agreed payment terms.</textarea>
   </div>
 </div>
 
-<div class="document-info">
-  <div>
+<div class="document-info" id="previewClientProjectInfo">
+  <div id="previewClientBlock">
     <div class="info-title">Bill To</div>
     <div class="info-value">
-      <strong id="previewClientName">—</strong><br>
-      <span id="previewClientAddress"></span><br>
-      <span id="previewClientPhone"></span><br>
-      <span id="previewClientEmail"></span>
+      <strong id="previewClientName"></strong>
+      <div id="previewClientAddress"></div>
+      <div id="previewClientPhone"></div>
+      <div id="previewClientEmail"></div>
     </div>
   </div>
-  <div>
+  <div id="previewProjectBlock">
     <div class="info-title">Service / Project</div>
     <div class="info-value" id="previewProjectName">—</div>
   </div>
@@ -316,12 +329,12 @@ Work commencement is subject to the agreed payment terms.</textarea>
 
 <div id="previewSpecificInfo" class="document-info document-specific-info" hidden></div>
 
-<div class="scope-box">
+<div class="scope-box" id="previewScopeBox">
   <div class="info-title">Scope of Work</div>
   <div class="scope-text" id="previewScopeOfWork">—</div>
 </div>
 
-<table class="document-table">
+<table class="document-table" id="previewItemsTable">
   <caption class="sr-only">Document line items</caption>
   <thead>
     <tr>
@@ -336,21 +349,15 @@ Work commencement is subject to the agreed payment terms.</textarea>
 </table>
 
 <div class="document-totals">
-  <div class="document-total-row"><span>Subtotal</span><strong id="previewSubtotal">₦0.00</strong></div>
-  <div class="document-total-row"><span>Discount</span><strong id="previewDiscount">₦0.00</strong></div>
-  <div class="document-total-row"><span>Tax / VAT</span><strong id="previewTax">₦0.00</strong></div>
+  <div class="document-total-row" id="previewSubtotalRow"><span>Subtotal</span><strong id="previewSubtotal">₦0.00</strong></div>
+  <div class="document-total-row" id="previewDiscountRow"><span>Discount</span><strong id="previewDiscount">₦0.00</strong></div>
+  <div class="document-total-row" id="previewTaxRow"><span>Tax / VAT</span><strong id="previewTax">₦0.00</strong></div>
   <div class="document-total-row document-grand-total"><span>Total</span><strong id="previewGrandTotal">₦0.00</strong></div>
 </div>
 
-<div class="notes">
-  <div><h4>Payment Details</h4><p id="previewPaymentDetails">—</p></div>
-  <div><h4>Terms & Conditions</h4><p id="previewTerms">—</p></div>
-</div>
-
-<div class="document-footer">
-  <strong>IMC Technology</strong><br>
-  Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions<br>
-  Thank you for your business.
+<div class="notes" id="previewNotes">
+  <div id="previewPaymentBlock"><h4>Payment Details</h4><p id="previewPaymentDetails"></p></div>
+  <div id="previewTermsBlock"><h4>Terms & Conditions</h4><p id="previewTerms"></p></div>
 </div>
 
 </div>

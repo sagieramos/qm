@@ -1,7 +1,7 @@
 /* IndexedDB persistence layer. All records stay on this device. */
 const BusinessDB = (() => {
   const DB_NAME = 'business_document_manager';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const STORES = ['companies', 'parties', 'documents', 'lineItems', 'sequences'];
   let databasePromise;
 
@@ -10,7 +10,7 @@ const BusinessDB = (() => {
     databasePromise = new Promise((resolve, reject) => {
       if (!('indexedDB' in window)) return reject(new Error('This browser does not support IndexedDB.'));
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = () => {
+      request.onupgradeneeded = event => {
         const db = request.result;
         if (!db.objectStoreNames.contains('companies')) db.createObjectStore('companies', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('parties')) db.createObjectStore('parties', { keyPath: 'id' });
@@ -25,6 +25,20 @@ const BusinessDB = (() => {
         const lineItems = request.transaction.objectStore('lineItems');
         if (!lineItems.indexNames.contains('documentId')) lineItems.createIndex('documentId', 'documentId', { unique:false });
         if (!db.objectStoreNames.contains('sequences')) db.createObjectStore('sequences', { keyPath: 'id' });
+        if (event.oldVersion < 3) {
+          const documents = request.transaction.objectStore('documents');
+          const cursorRequest = documents.openCursor();
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (!cursor) return;
+            const record = cursor.value;
+            if (!record.deliveryStatus) record.deliveryStatus = record.status === 'Sent' ? 'Sent' : 'Not Sent';
+            if (record.status === 'Sent' || (record.status === 'Unpaid' && record.type === 'INVOICE')) record.status = 'Issued';
+            if (!record.status) record.status = 'Draft';
+            cursor.update(record);
+            cursor.continue();
+          };
+        }
       };
       request.onsuccess = () => { request.result.onversionchange = () => request.result.close(); resolve(request.result); };
       request.onerror = () => reject(request.error || new Error('Could not open local database.'));
@@ -74,7 +88,7 @@ const BusinessDB = (() => {
         const number = options.preserveNumber && data.document?.number ? data.document.number : `${prefix[type] || 'DOC'}-${stamp}-${String(sequence).padStart(4,'0')}`;
         if (!options.preserveNumber || !data.document?.number) sequences.put({ id: seqId, value: sequence });
         const id = makeId();
-        saved = { ...data, id, number, type, document: { ...data.document, type, number }, status: data.status || 'Draft', sourceId: data.sourceId || null, sourceNumber: data.sourceNumber || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        saved = { ...data, id, number, type, document: { ...data.document, type, number }, status: data.status || 'Draft', deliveryStatus: data.deliveryStatus || 'Not Sent', sourceId: data.sourceId || null, sourceNumber: data.sourceNumber || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
         saved.items = [];
         (data.items || []).forEach((item, index) => {
           const line = { ...item, id: `${id}:line:${index+1}`, documentId: id, position: index };
@@ -124,7 +138,7 @@ const BusinessDB = (() => {
         const old = get.result;
         if (!old) { tx.abort(); return; }
         const stableType = old.type;
-        saved = { ...old, ...data, type: stableType, number: old.number, document: { ...data.document, type: stableType, number: old.number }, createdAt: old.createdAt, updatedAt: new Date().toISOString() };
+        saved = { ...old, ...data, type: stableType, number: old.number, document: { ...data.document, type: stableType, number: old.number }, deliveryStatus: data.deliveryStatus || old.deliveryStatus || 'Not Sent', createdAt: old.createdAt, updatedAt: new Date().toISOString() };
         saved.items = [];
         const cursor = items.openCursor();
         cursor.onsuccess = () => {

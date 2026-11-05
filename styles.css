@@ -75,6 +75,7 @@ button, input, textarea, select { font: inherit; }
 .preview { min-width:0; margin:0; background:transparent; padding:0; position:sticky; top:94px; }
 .preview > h2 { margin:0 0 13px; color:#708078; text-transform:uppercase; font-size:10px; letter-spacing:.12em; font-weight:800; }
 .document { width:100%; min-width:0; background:#fff; max-width:850px; margin:auto; padding:45px; border:1px solid #e7ece8; border-radius:4px; box-shadow:0 18px 55px rgba(26,55,42,.13); color:#1f2937; }
+.document [hidden] { display:none !important; }
 .document-header { display:flex; justify-content:space-between; gap:30px; border-bottom:3px solid var(--primary); padding-bottom:20px; }
 .document-header > div { flex:1 1 0; min-width:0; }
 .preview-logo { max-height:55px; max-width:180px; object-fit:contain; display:none; margin-bottom:8px; }
@@ -100,7 +101,6 @@ button, input, textarea, select { font: inherit; }
 .notes { margin-top:35px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:35px; }
 .notes h4 { margin:0 0 8px; font-size:10px; color:var(--primary-dark); }
 .notes p { white-space:pre-line; overflow-wrap:anywhere; margin:0; font-size:9px; line-height:1.7; color:#4b5563; }
-.document-footer { margin-top:40px; border-top:1px solid #e1e7e3; padding-top:12px; text-align:center; color:#6b7280; font-size:8px; line-height:1.6; }
 .toast { position:fixed; left:50%; bottom:24px; transform:translate(-50%,20px); background:#173d2e; color:#fff; padding:11px 18px; border-radius:9px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s,transform .25s; z-index:999; padding-bottom:calc(11px + env(safe-area-inset-bottom,0px)); box-shadow:0 8px 24px rgba(0,0,0,.2); }
 .toast.show { opacity:1; transform:translate(-50%,0); }
 
@@ -399,6 +399,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 @media print {
   .sidebar,.route-view { display:none !important; }
+  .app-content .page-heading { display:none !important; }
   .app-layout { display:block; min-height:0; padding:0; }
   .app-content { padding:0; }
   .app-content .page { display:block; width:auto; max-width:none; grid-template-columns:none; margin:0; padding:0; }
