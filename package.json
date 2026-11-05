@@ -1,0 +1,11 @@
+{
+  "name": "imc-technology-document-builder",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

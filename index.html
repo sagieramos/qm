@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>IMC Technology | Document Builder</title>
+<title>IMC Technology</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="improvement.css">
 </head>
@@ -49,7 +49,7 @@
 
 <section class="route-view" id="documentsView" hidden>
   <div class="view-heading"><div><div class="eyebrow">DOCUMENTS</div><h1>All Documents</h1><p>View, edit, duplicate or remove your saved documents.</p></div></div>
-  <div class="panel documents-panel"><div class="list-toolbar"><label class="sr-only" for="documentSearch">Search documents</label><input id="documentSearch" type="search" placeholder="Search by number, customer or type" oninput="renderDocumentTable()"><label class="sr-only" for="documentTypeFilter">Filter by document type</label><select id="documentTypeFilter" onchange="renderDocumentTable()"><option value="">All types</option></select><label class="sr-only" for="documentStatusFilter">Filter by document status</label><select id="documentStatusFilter" onchange="renderDocumentTable()"><option value="">All document statuses</option><option>Draft</option><option>Issued</option><option>Accepted</option><option>Rejected</option><option>Partially Paid</option><option>Paid</option><option>Overdue</option><option>Cancelled</option><option>Expired</option><option>Final</option></select></div><div id="allDocumentsList"></div></div>
+  <div class="panel documents-panel"><div class="list-toolbar"><label class="sr-only" for="documentSearch">Search documents</label><input id="documentSearch" type="search" placeholder="Search by number, customer or type" oninput="renderDocumentTable()"><label class="sr-only" for="documentTypeFilter">Filter by document type</label><select id="documentTypeFilter" onchange="renderDocumentTable()"><option value="">All types</option></select></div><div id="allDocumentsList"></div></div>
 </section>
 
 <section class="route-view" id="customersView" hidden>
@@ -67,30 +67,6 @@
   </div><div class="field profile-address"><label for="profileCompanyAddress">Address</label><textarea id="profileCompanyAddress"></textarea></div>
     <div class="field profile-address"><label for="profileCompanyLogo">Company logo</label><input id="profileCompanyLogo" type="file" accept="image/*"><span class="help-text">Optional image, up to 2 MB.</span><img id="profileLogoPreview" class="profile-logo-preview" alt="Company logo preview"></div>
   </div>
-  <section class="profile-signatures" aria-labelledby="signaturesHeading">
-    <div class="panel-heading"><div><h2 id="signaturesHeading">Signatures</h2><p>Create authorized signatories for this business. Only one signature can be the default.</p></div></div>
-    <div id="signatureList" class="signature-list" aria-live="polite"></div>
-    <div class="signature-editor">
-      <h3 id="signatureFormHeading">Add an authorized signature</h3>
-      <div class="grid">
-        <div class="field"><label for="signatureName">Signatory name</label><input id="signatureName" autocomplete="name"></div>
-        <div class="field"><label for="signatureDesignation">Designation</label><input id="signatureDesignation" placeholder="e.g. Managing Director"></div>
-      </div>
-      <div class="signature-create-methods">
-        <div class="field"><label for="signatureCanvas">Draw signature</label><canvas id="signatureCanvas" class="signature-canvas" width="700" height="180" aria-label="Draw signature here"></canvas><div class="signature-canvas-actions"><span class="help-text">Use a mouse, touch or stylus.</span><button class="btn btn-secondary" type="button" onclick="clearSignatureCanvas()">Clear drawing</button></div></div>
-        <div class="field"><label for="signatureUpload">Or upload a signature image</label><input id="signatureUpload" type="file" accept="image/png,image/jpeg,image/webp"><span class="help-text">Transparent PNG works best; maximum 2 MB.</span></div>
-      </div>
-      <label class="check-row"><input id="signatureDefault" type="checkbox" checked> Make this the default authorized signature</label>
-      <div class="signature-form-actions"><button class="btn btn-primary" type="button" onclick="saveSignatureProfile()">Save signature</button><button class="btn btn-secondary" id="cancelSignatureEdit" type="button" onclick="cancelSignatureEdit()" hidden>Cancel edit</button></div>
-    </div>
-    <div class="signature-pdf-settings">
-      <h3>PDF settings</h3>
-      <label class="check-row"><input id="autoIncludeSignature" type="checkbox" checked> Automatically include signature in PDFs</label>
-      <label class="check-row"><input id="showSignatoryDetails" type="checkbox" checked> Show signatory name and designation</label>
-      <div class="field"><span class="field-label">Include signature automatically for</span><div id="signatureDocumentTypes" class="signature-type-list"></div></div>
-      <button class="btn btn-secondary" type="button" onclick="saveSignatureSettings()">Save signature settings</button>
-    </div>
-  </section>
 </section>
 
 <section class="route-view" id="settingsView" hidden>
@@ -109,15 +85,14 @@
 </div>
 <button class="back-btn" type="button" onclick="navigateTo('documents')">← All documents</button>
 <div class="mobile-tabs" role="tablist" aria-label="Workspace view">
-  <button id="editTab" type="button" role="tab" aria-controls="editorPanel" aria-selected="true" tabindex="0" onclick="setWorkspaceTab('edit')">Edit</button>
-  <button id="previewTab" type="button" role="tab" aria-controls="previewPanel" aria-selected="false" tabindex="-1" onclick="setWorkspaceTab('preview')">Preview</button>
+  <button id="editTab" type="button" role="tab" aria-controls="editorPanel" aria-selected="true" tabindex="0" onclick="setWorkspaceTab('edit')"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg><span>Edit</span></button>
+  <button id="previewTab" type="button" role="tab" aria-controls="previewPanel" aria-selected="false" tabindex="-1" onclick="setWorkspaceTab('preview')"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><span>Preview</span></button>
 </div>
 <div class="editor" id="editorPanel">
 <div class="editor-toolbar" aria-label="Document actions">
   <div class="editor-toolbar-actions">
-    <button class="btn btn-secondary" onclick="showDocumentPreview()"><span aria-hidden="true">◉</span> Preview</button>
-    <button class="btn btn-secondary" onclick="window.print()"><span aria-hidden="true">▧</span> Print<span class="hide-sm"> / Save PDF</span></button>
-    <button class="btn btn-primary" onclick="saveDocument(false)"><span aria-hidden="true">✓</span> Save</button>
+    <button class="btn btn-secondary document-action" type="button" aria-label="Print or save as PDF" title="Print or save as PDF" onclick="printDocument()"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/><path d="M17 11h.01"/></svg><span>Print / PDF</span></button>
+    <button class="btn btn-primary document-action" type="button" aria-label="Save document" title="Save document" onclick="saveDocument(false)"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 3h12l4 4v14H3V3h2Z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/></svg><span>Save</span></button>
   </div>
   <span class="save-status" id="saveStatus" role="status" aria-live="polite">Saved</span>
 </div>
@@ -179,12 +154,8 @@
       </select>
     </div>
     <div class="field">
-      <label for="documentStatus">Document status</label>
+      <label for="documentStatus">Status</label>
       <select id="documentStatus" onchange="onDocumentStatusChange()"></select>
-    </div>
-    <div class="field">
-      <label for="deliveryStatus">Delivery status</label>
-      <select id="deliveryStatus" onchange="onDeliveryStatusChange()"></select>
     </div>
     <div class="field">
       <label for="documentNumber">Document Number</label>
@@ -306,7 +277,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
 </div>
 
 <div class="preview" id="previewPanel">
-<div class="preview-heading"><div><div class="eyebrow">LIVE PREVIEW</div><h2>Document preview</h2></div><div class="preview-heading-actions"><span>Print ready</span><button class="preview-print" type="button" onclick="window.print()">Print / PDF</button></div></div>
+<div class="preview-heading"><div><div class="eyebrow">LIVE PREVIEW</div><h2>Document preview</h2></div><div class="preview-heading-actions"><span>Print ready</span><button class="preview-print" type="button" onclick="printDocument()">Print / PDF</button></div></div>
 <div class="document" id="documentPreview">
 
 <div class="document-header">
@@ -323,10 +294,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
   </div>
   <div>
     <div class="document-type" id="previewDocumentType">QUOTATION</div>
-    <div id="previewStatusStamp" class="pdf-status-stamp" hidden>
-      <span id="previewDocumentStatus"></span>
-      <span id="previewPaymentSummary" hidden></span>
-    </div>
+    <div id="previewDocumentStatus" class="preview-status">Draft</div>
 <div class="document-number">
       <strong id="previewNumberLabel">Quotation No.:</strong> <span id="previewDocumentNumber">QUO-2026-0001</span><br>
       <strong>Date:</strong> <span id="previewDocumentDate"></span>
@@ -335,8 +303,8 @@ Work commencement is subject to the agreed payment terms.</textarea>
   </div>
 </div>
 
-<div class="document-info" id="previewClientProjectInfo">
-  <div id="previewClientBlock">
+<div class="document-info">
+  <div>
     <div class="info-title">Bill To</div>
     <div class="info-value">
       <strong id="previewClientName"></strong>
@@ -353,7 +321,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
 
 <div id="previewSpecificInfo" class="document-info document-specific-info" hidden></div>
 
-<div class="scope-box" id="previewScopeBox">
+<div class="scope-box">
   <div class="info-title">Scope of Work</div>
   <div class="scope-text" id="previewScopeOfWork">—</div>
 </div>
@@ -366,16 +334,16 @@ Work commencement is subject to the agreed payment terms.</textarea>
       <th>Description</th>
       <th style="width:10%;">Qty</th>
       <th style="width:12%;">Unit</th>
-      <th style="width:20%;">Amount</th>
+      <th style="width:23%;">Amount <span id="previewPdfCurrencyCode" class="print-currency-code">(NGN)</span></th>
     </tr>
   </thead>
   <tbody id="previewItemsBody"></tbody>
 </table>
 
 <div class="document-totals">
-  <div class="document-total-row" id="previewSubtotalRow"><span>Subtotal</span><strong id="previewSubtotal">₦0.00</strong></div>
-  <div class="document-total-row" id="previewDiscountRow"><span>Discount</span><strong id="previewDiscount">₦0.00</strong></div>
-  <div class="document-total-row" id="previewTaxRow"><span>Tax / VAT</span><strong id="previewTax">₦0.00</strong></div>
+  <div class="document-total-row"><span>Subtotal</span><strong id="previewSubtotal">₦0.00</strong></div>
+  <div class="document-total-row"><span>Discount</span><strong id="previewDiscount">₦0.00</strong></div>
+  <div class="document-total-row"><span>Tax / VAT</span><strong id="previewTax">₦0.00</strong></div>
   <div class="document-total-row document-grand-total"><span>Total</span><strong id="previewGrandTotal">₦0.00</strong></div>
 </div>
 
@@ -383,9 +351,11 @@ Work commencement is subject to the agreed payment terms.</textarea>
   <div id="previewPaymentBlock"><h4>Payment Details</h4><p id="previewPaymentDetails"></p></div>
   <div id="previewTermsBlock"><h4>Terms & Conditions</h4><p id="previewTerms"></p></div>
 </div>
-<div class="document-signature" id="previewSignature" hidden>
-  <img id="previewSignatureImage" alt="Authorized signature">
-  <div class="signature-caption" id="previewSignatureCaption"></div>
+
+<div class="document-footer">
+  <strong>IMC Technology</strong><br>
+  Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions<br>
+  Thank you for your business.
 </div>
 
 </div>

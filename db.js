@@ -1,8 +1,8 @@
 /* IndexedDB persistence layer. All records stay on this device. */
 const BusinessDB = (() => {
   const DB_NAME = 'business_document_manager';
-  const DB_VERSION = 4;
-  const STORES = ['companies', 'parties', 'documents', 'lineItems', 'sequences', 'signatures'];
+  const DB_VERSION = 2;
+  const STORES = ['companies', 'parties', 'documents', 'lineItems', 'sequences'];
   let databasePromise;
 
   function open() {
@@ -241,7 +241,7 @@ const BusinessDB = (() => {
       const abort = error => { if (settled) return; settled=true; try { tx.abort(); } catch {} reject(error); };
       tx.onerror=()=>{ if (!settled) { settled=true; reject(tx.error || new Error('Backup merge failed; no records were imported.')); } };
       tx.onabort=()=>{ if (!settled) { settled=true; reject(tx.error || new Error('Backup merge failed; no records were imported.')); } };
-      tx.oncomplete=()=>{ if (!settled) { settled=true; resolve({ inserted, skipped }); } };
+      tx.oncomplete=()=>{ if (!settled) { settled=true; migrateStatuses().then(()=>resolve({ inserted, skipped }),reject); } };
       for (const name of STORES) {
         const request=tx.objectStore(name).getAllKeys();
         request.onsuccess=()=>{
@@ -259,6 +259,39 @@ const BusinessDB = (() => {
         };
         request.onerror=()=>abort(request.error || new Error('Could not check for duplicate backup records.'));
       }
+    });
+  }
+  async function migrateStatuses() {
+    const db=await open();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction('documents','readwrite');
+      const store=tx.objectStore('documents');
+      const request=store.getAll();
+      request.onsuccess=()=>{
+        const valid=new Set(['Draft','Issued','Accepted','Rejected','Paid','Partially Paid','Overdue','Cancelled']);
+        const validDelivery=new Set(['Not Sent','Sent','Delivered','Viewed']);
+        request.result.forEach(doc=>{
+          const previous=doc.status || 'Draft';
+          let mapped={ Sent:'Issued', Unpaid:'Issued', Final:'Issued', Expired:'Issued' }[previous] || previous;
+          if (doc.type==='INVOICE' && !['Cancelled','Overdue'].includes(mapped)) {
+            const subtotal=(doc.items||[]).reduce((sum,item)=>sum+(Number(item.quantity)||0)*(Number(item.price)||0),0);
+            const total=Math.max(0,subtotal-Math.max(0,Number(doc.discount)||0)+Math.max(0,Number(doc.tax)||0));
+            const received=Math.max(0,Number(doc.document?.specific?.amountReceived)||0);
+            if (total>0 && received>=total-0.01) mapped='Paid';
+            else if (received>0) mapped='Partially Paid';
+            else if (['Paid','Partially Paid'].includes(mapped)) mapped='Issued';
+          }
+          const deliveryStatus=validDelivery.has(doc.deliveryStatus)?doc.deliveryStatus:(previous==='Sent'?'Sent':'Not Sent');
+          if (!valid.has(mapped) || !validDelivery.has(doc.deliveryStatus) || mapped!==previous) {
+            const updated={...doc,status:valid.has(mapped)?mapped:'Draft',deliveryStatus};
+            if (!valid.has(mapped) || previous==='Expired') updated.legacyStatus=previous;
+            store.put(updated);
+          }
+        });
+      };
+      tx.oncomplete=resolve;
+      tx.onerror=()=>reject(tx.error || new Error('Could not migrate document statuses.'));
+      tx.onabort=()=>reject(tx.error || new Error('Document status migration was cancelled.'));
     });
   }
   async function migrateLegacy() {
@@ -280,6 +313,6 @@ const BusinessDB = (() => {
     try { localStorage.setItem(marker, 'verified'); } catch {}
     return true;
   }
-  return { open, createDocument, updateDocument, getDocument, listDocuments, removeDocument, getRecords, getRecord, putRecord, deleteRecord, saveSignature, deleteSignature, allData, importData, migrateLegacy };
+  return { open, createDocument, updateDocument, getDocument, listDocuments, removeDocument, getRecords, getRecord, putRecord, deleteRecord, allData, importData, migrateLegacy };
 })();
 window.BusinessDB = BusinessDB;
