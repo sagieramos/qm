@@ -1,8 +1,8 @@
 /* IndexedDB persistence layer. All records stay on this device. */
 const BusinessDB = (() => {
   const DB_NAME = 'business_document_manager';
-  const DB_VERSION = 3;
-  const STORES = ['companies', 'parties', 'documents', 'lineItems', 'sequences'];
+  const DB_VERSION = 4;
+  const STORES = ['companies', 'parties', 'documents', 'lineItems', 'sequences', 'signatures'];
   let databasePromise;
 
   function open() {
@@ -25,6 +25,10 @@ const BusinessDB = (() => {
         const lineItems = request.transaction.objectStore('lineItems');
         if (!lineItems.indexNames.contains('documentId')) lineItems.createIndex('documentId', 'documentId', { unique:false });
         if (!db.objectStoreNames.contains('sequences')) db.createObjectStore('sequences', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('signatures')) {
+          const signatures = db.createObjectStore('signatures', { keyPath: 'id' });
+          signatures.createIndex('businessId', 'businessId', { unique:false });
+        }
         if (event.oldVersion < 3) {
           const documents = request.transaction.objectStore('documents');
           const cursorRequest = documents.openCursor();
@@ -168,6 +172,37 @@ const BusinessDB = (() => {
     if (!STORES.includes(storeName) || !record?.id) throw new Error('A valid store and record ID are required.');
     const db=await open(); return requestResult(db.transaction(storeName,'readwrite').objectStore(storeName).put(record));
   }
+  async function saveSignature(record) {
+    if (!record?.id || !record.businessId || !record.name?.trim()) throw new Error('A business and signatory name are required.');
+    const db=await open();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction('signatures','readwrite');
+      const store=tx.objectStore('signatures');
+      const rows=store.index('businessId').getAll(record.businessId);
+      rows.onsuccess=()=>{
+        const makeDefault=record.isDefault || !rows.result.some(row=>row.id!==record.id&&row.isDefault);
+        if (makeDefault) rows.result.forEach(row=>{ if(row.id!==record.id && row.isDefault) store.put({...row,isDefault:false,updatedAt:new Date().toISOString()}); });
+        store.put({...record,isDefault:makeDefault,name:record.name.trim(),designation:(record.designation||'').trim(),updatedAt:new Date().toISOString()});
+      };
+      tx.oncomplete=()=>resolve(record);
+      tx.onerror=()=>reject(tx.error||new Error('Could not save signature.'));
+    });
+  }
+  async function deleteSignature(id) {
+    const db=await open();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction('signatures','readwrite'), store=tx.objectStore('signatures'), get=store.get(id);
+      get.onsuccess=()=>{
+        const row=get.result; if(!row) return;
+        store.delete(id);
+        if(row.isDefault) {
+          const rows=store.index('businessId').getAll(row.businessId);
+          rows.onsuccess=()=>{ const next=rows.result.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))[0]; if(next) store.put({...next,isDefault:true,updatedAt:new Date().toISOString()}); };
+        }
+      };
+      tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error||new Error('Could not delete signature.'));
+    });
+  }
   async function deleteRecord(storeName,id) {
     if (!STORES.includes(storeName)) throw new Error('Unknown database store.');
     const db=await open(); return requestResult(db.transaction(storeName,'readwrite').objectStore(storeName).delete(id));
@@ -189,6 +224,7 @@ const BusinessDB = (() => {
   }
   async function importData(backup) {
     if (!backup || backup.format !== 'business_document_manager' || !Number.isInteger(backup.version) || backup.version < 1 || backup.version > DB_VERSION || ('formatVersion' in backup && backup.formatVersion !== 1) || !backup.stores || typeof backup.stores !== 'object') throw new Error('This file is not a supported business document backup.');
+    if (backup.version < 4 && !Array.isArray(backup.stores.signatures)) backup.stores.signatures=[];
     for (const name of STORES) {
       if (!Array.isArray(backup.stores[name])) throw new Error(`Backup data for ${name} is missing or invalid.`);
       const ids=new Set();
@@ -244,6 +280,6 @@ const BusinessDB = (() => {
     try { localStorage.setItem(marker, 'verified'); } catch {}
     return true;
   }
-  return { open, createDocument, updateDocument, getDocument, listDocuments, removeDocument, getRecords, getRecord, putRecord, deleteRecord, allData, importData, migrateLegacy };
+  return { open, createDocument, updateDocument, getDocument, listDocuments, removeDocument, getRecords, getRecord, putRecord, deleteRecord, saveSignature, deleteSignature, allData, importData, migrateLegacy };
 })();
 window.BusinessDB = BusinessDB;

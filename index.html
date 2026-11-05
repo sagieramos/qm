@@ -26,7 +26,7 @@
   <button class="nav-link" data-view="documents" aria-label="All Documents" onclick="navigateTo('documents')"><span aria-hidden="true">▤</span>All Documents</button>
   <button class="nav-link" data-view="customers" aria-label="Customers" onclick="navigateTo('customers')"><span aria-hidden="true">♧</span>Customers</button>
   <div class="sidebar-label sidebar-label-lower">BUSINESS</div>
-  <button class="nav-link" data-view="company" aria-label="Company Profile" onclick="navigateTo('company')"><span aria-hidden="true">▣</span>Company Profile</button>
+  <button class="nav-link" data-view="company" aria-label="Business Profile" onclick="navigateTo('company')"><span aria-hidden="true">▣</span>Business Profile</button>
   <button class="nav-link" data-view="settings" aria-label="Settings" onclick="navigateTo('settings')"><span aria-hidden="true">⚙</span>Settings</button>
   <div class="sidebar-foot"><span class="sidebar-status-dot"></span> Your data stays on this device</div>
 </nav>
@@ -58,7 +58,7 @@
 </section>
 
 <section class="route-view" id="companyView" hidden>
-  <div class="view-heading"><div><div class="eyebrow">BUSINESS</div><h1>Company Profile</h1><p>These details appear on new documents and their previews.</p></div><button class="btn btn-primary" onclick="saveCompanyProfile()">Save profile</button></div>
+  <div class="view-heading"><div><div class="eyebrow">BUSINESS</div><h1>Business Profile</h1><p>These details appear on new documents and their previews.</p></div><button class="btn btn-primary" onclick="saveCompanyProfile()">Save profile</button></div>
   <div class="panel profile-panel"><div class="grid">
     <div class="field"><label for="profileCompanyName">Company name</label><input id="profileCompanyName"></div>
     <div class="field"><label for="profileCompanyEmail">Email</label><input id="profileCompanyEmail" type="email"></div>
@@ -67,11 +67,35 @@
   </div><div class="field profile-address"><label for="profileCompanyAddress">Address</label><textarea id="profileCompanyAddress"></textarea></div>
     <div class="field profile-address"><label for="profileCompanyLogo">Company logo</label><input id="profileCompanyLogo" type="file" accept="image/*"><span class="help-text">Optional image, up to 2 MB.</span><img id="profileLogoPreview" class="profile-logo-preview" alt="Company logo preview"></div>
   </div>
+  <section class="profile-signatures" aria-labelledby="signaturesHeading">
+    <div class="panel-heading"><div><h2 id="signaturesHeading">Signatures</h2><p>Create authorized signatories for this business. Only one signature can be the default.</p></div></div>
+    <div id="signatureList" class="signature-list" aria-live="polite"></div>
+    <div class="signature-editor">
+      <h3 id="signatureFormHeading">Add an authorized signature</h3>
+      <div class="grid">
+        <div class="field"><label for="signatureName">Signatory name</label><input id="signatureName" autocomplete="name"></div>
+        <div class="field"><label for="signatureDesignation">Designation</label><input id="signatureDesignation" placeholder="e.g. Managing Director"></div>
+      </div>
+      <div class="signature-create-methods">
+        <div class="field"><label for="signatureCanvas">Draw signature</label><canvas id="signatureCanvas" class="signature-canvas" width="700" height="180" aria-label="Draw signature here"></canvas><div class="signature-canvas-actions"><span class="help-text">Use a mouse, touch or stylus.</span><button class="btn btn-secondary" type="button" onclick="clearSignatureCanvas()">Clear drawing</button></div></div>
+        <div class="field"><label for="signatureUpload">Or upload a signature image</label><input id="signatureUpload" type="file" accept="image/png,image/jpeg,image/webp"><span class="help-text">Transparent PNG works best; maximum 2 MB.</span></div>
+      </div>
+      <label class="check-row"><input id="signatureDefault" type="checkbox" checked> Make this the default authorized signature</label>
+      <div class="signature-form-actions"><button class="btn btn-primary" type="button" onclick="saveSignatureProfile()">Save signature</button><button class="btn btn-secondary" id="cancelSignatureEdit" type="button" onclick="cancelSignatureEdit()" hidden>Cancel edit</button></div>
+    </div>
+    <div class="signature-pdf-settings">
+      <h3>PDF settings</h3>
+      <label class="check-row"><input id="autoIncludeSignature" type="checkbox" checked> Automatically include signature in PDFs</label>
+      <label class="check-row"><input id="showSignatoryDetails" type="checkbox" checked> Show signatory name and designation</label>
+      <div class="field"><span class="field-label">Include signature automatically for</span><div id="signatureDocumentTypes" class="signature-type-list"></div></div>
+      <button class="btn btn-secondary" type="button" onclick="saveSignatureSettings()">Save signature settings</button>
+    </div>
+  </section>
 </section>
 
 <section class="route-view" id="settingsView" hidden>
   <div class="view-heading"><div><div class="eyebrow">PREFERENCES</div><h1>Settings</h1><p>Manage your local application data and backups.</p></div></div>
-  <div class="panel backup-panel"><div class="panel-heading"><div><h2>Data &amp; Backup</h2><p>Export a copy of your data or merge records from another backup.</p></div></div><div class="backup-actions"><article class="backup-action"><div class="action-icon" aria-hidden="true">↓</div><div><h3>Export Backup</h3><p>Download company profiles, customers, suppliers, documents, line items and numbering sequences as JSON.</p></div><button class="btn btn-secondary" onclick="exportBackup()">Export backup</button></article><article class="backup-action"><div class="action-icon" aria-hidden="true">↑</div><div><h3>Import Backup</h3><p>Merge records from a valid business backup. Existing matching records are kept.</p></div><label class="btn btn-secondary backup-import">Choose backup<input id="backupFile" type="file" accept="application/json,.json" onchange="importBackup(event)"></label></article></div></div>
+  <div class="panel backup-panel"><div class="panel-heading"><div><h2>Data &amp; Backup</h2><p>Export a copy of your data or merge records from another backup.</p></div></div><div class="backup-actions"><article class="backup-action"><div class="action-icon" aria-hidden="true">↓</div><div><h3>Export Backup</h3><p>Download business profiles, signatures, customers, suppliers, documents, line items and numbering sequences as JSON.</p></div><button class="btn btn-secondary" onclick="exportBackup()">Export backup</button></article><article class="backup-action"><div class="action-icon" aria-hidden="true">↑</div><div><h3>Import Backup</h3><p>Merge records from a valid business backup. Existing matching records are kept.</p></div><label class="btn btn-secondary backup-import">Choose backup<input id="backupFile" type="file" accept="application/json,.json" onchange="importBackup(event)"></label></article></div></div>
 </section>
 
 <main class="page" id="workspacePage" data-tab="edit" hidden>
@@ -358,6 +382,10 @@ Work commencement is subject to the agreed payment terms.</textarea>
 <div class="notes" id="previewNotes">
   <div id="previewPaymentBlock"><h4>Payment Details</h4><p id="previewPaymentDetails"></p></div>
   <div id="previewTermsBlock"><h4>Terms & Conditions</h4><p id="previewTerms"></p></div>
+</div>
+<div class="document-signature" id="previewSignature" hidden>
+  <img id="previewSignatureImage" alt="Authorized signature">
+  <div class="signature-caption" id="previewSignatureCaption"></div>
 </div>
 
 </div>

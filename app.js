@@ -5,6 +5,9 @@ const CURRENCY_LOCALES = {
 };
 
 let companyLogoData = '';
+let companySignatureSettings = { autoInclude:true, showSignatory:true, documentTypes:Object.keys(DOCUMENT_TYPES) };
+let defaultBusinessSignature = null;
+let editingSignatureId = null;
 let autosaveTimer = null;
 let saveQueue = Promise.resolve();
 let changeRevision = 0;
@@ -59,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await BusinessDB.open();
     await BusinessDB.migrateLegacy();
     await loadCompanyProfile();
+    initSignatureCanvas();
     await loadDocument();
     await navigateTo('dashboard', false);
     document.querySelectorAll('.editor .section-title').forEach(title => {
@@ -476,6 +480,7 @@ function updatePreview() {
   const get = id => document.getElementById(id).value;
 
   document.getElementById('previewCompanyName').textContent = get('companyName');
+  updateSignaturePreview(get('documentType'));
   document.getElementById('previewCompanyEmail').textContent = get('companyEmail');
   document.getElementById('previewCompanyPhone').textContent = get('companyPhone');
   document.getElementById('previewCompanyWebsite').textContent = get('companyWebsite');
@@ -770,9 +775,106 @@ function populateCompanyProfile(company = {}) {
 
 async function loadCompanyProfile() {
   const companies=await BusinessDB.getRecords('companies');
-  const profile=companies.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))[0] || {};
+  const profile=companies.find(row=>row.id===BUSINESS_ID) || companies.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))[0] || {};
   populateCompanyProfile(profile);
+  companySignatureSettings={autoInclude:profile.signatureSettings?.autoInclude ?? true,showSignatory:profile.signatureSettings?.showSignatory ?? true,documentTypes:profile.signatureSettings?.documentTypes || Object.keys(DOCUMENT_TYPES)};
+  renderSignatureSettings();
+  await loadBusinessSignatures();
   return profile;
+}
+
+const BUSINESS_ID='company:default';
+function signatureId() { return `signature:${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`}`; }
+async function loadBusinessSignatures() {
+  const signatures=await BusinessDB.getRecords('signatures');
+  const rows=signatures.filter(row=>row.businessId===BUSINESS_ID).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+  defaultBusinessSignature=rows.find(row=>row.isDefault)||null;
+  renderSignatureList(rows);
+}
+function renderSignatureList(rows) {
+  const list=document.getElementById('signatureList');
+  if(!list) return;
+  if(!rows.length) { list.innerHTML='<p class="signature-empty">No authorized signatures yet.</p>'; return; }
+  list.replaceChildren(...rows.map(row=>{
+    const card=document.createElement('article'); card.className='signature-card';
+    const image=document.createElement('img'); image.src=row.image; image.alt=`Signature of ${row.name}`;
+    const details=document.createElement('div'); details.className='signature-card-details';
+    const name=document.createElement('strong'); name.textContent=row.name;
+    const designation=document.createElement('span'); designation.textContent=row.designation||'No designation';
+    details.append(name,designation);
+    if(row.isDefault) { const badge=document.createElement('span'); badge.className='signature-default-badge'; badge.textContent='Default'; details.append(badge); }
+    const actions=document.createElement('div'); actions.className='signature-card-actions';
+    const edit=document.createElement('button'); edit.type='button'; edit.className='btn btn-secondary'; edit.textContent='Edit'; edit.onclick=()=>editSignature(row);
+    if(!row.isDefault) { const makeDefault=document.createElement('button'); makeDefault.type='button'; makeDefault.className='btn btn-secondary'; makeDefault.textContent='Make default'; makeDefault.onclick=()=>setDefaultSignature(row); actions.append(makeDefault); }
+    const remove=document.createElement('button'); remove.type='button'; remove.className='btn btn-secondary'; remove.textContent='Delete'; remove.onclick=()=>removeSignature(row); actions.append(edit,remove);
+    card.append(image,details,actions); return card;
+  }));
+}
+function renderSignatureSettings() {
+  const list=document.getElementById('signatureDocumentTypes');
+  if(!list) return;
+  document.getElementById('autoIncludeSignature').checked=companySignatureSettings.autoInclude;
+  document.getElementById('showSignatoryDetails').checked=companySignatureSettings.showSignatory;
+  list.replaceChildren(...Object.entries(DOCUMENT_TYPES).map(([type,config])=>{
+    const label=document.createElement('label'); label.className='check-row';
+    const checkbox=document.createElement('input'); checkbox.type='checkbox'; checkbox.value=type; checkbox.checked=companySignatureSettings.documentTypes.includes(type); checkbox.onchange=updatePreview;
+    label.append(checkbox,document.createTextNode(config.title)); return label;
+  }));
+  document.getElementById('autoIncludeSignature').onchange=updatePreview;
+  document.getElementById('showSignatoryDetails').onchange=updatePreview;
+}
+function updateSignaturePreview(type) {
+  const block=document.getElementById('previewSignature');
+  if(!block) return;
+  const enabled=document.getElementById('autoIncludeSignature')?.checked ?? companySignatureSettings.autoInclude;
+  const typeCheckboxes=document.querySelectorAll('#signatureDocumentTypes input');
+  const selected=typeCheckboxes.length ? [...typeCheckboxes].some(input=>input.value===type&&input.checked) : companySignatureSettings.documentTypes.includes(type);
+  const signature=defaultBusinessSignature;
+  block.hidden=!(enabled&&selected&&signature?.image);
+  if(block.hidden) return;
+  document.getElementById('previewSignatureImage').src=signature.image;
+  const showDetails=document.getElementById('showSignatoryDetails')?.checked ?? companySignatureSettings.showSignatory;
+  const caption=document.getElementById('previewSignatureCaption');
+  caption.replaceChildren();
+  if(showDetails) {
+    const name=document.createElement('strong'); name.textContent=signature.name; caption.append(name);
+    if(signature.designation) { const designation=document.createElement('span'); designation.textContent=signature.designation; caption.append(designation); }
+  }
+}
+function initSignatureCanvas() {
+  const canvas=document.getElementById('signatureCanvas'); if(!canvas) return;
+  const ctx=canvas.getContext('2d'); ctx.strokeStyle='#173d2a'; ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round';
+  let drawing=false;
+  const point=event=>{const rect=canvas.getBoundingClientRect(); return {x:(event.clientX-rect.left)*canvas.width/rect.width,y:(event.clientY-rect.top)*canvas.height/rect.height};};
+  canvas.addEventListener('pointerdown',event=>{drawing=true; canvas.setPointerCapture(event.pointerId); const p=point(event); ctx.beginPath(); ctx.moveTo(p.x,p.y);});
+  canvas.addEventListener('pointermove',event=>{if(!drawing)return;const p=point(event);ctx.lineTo(p.x,p.y);ctx.stroke();});
+  canvas.addEventListener('pointerup',()=>drawing=false); canvas.addEventListener('pointercancel',()=>drawing=false);
+}
+function clearSignatureCanvas() { const canvas=document.getElementById('signatureCanvas'); canvas?.getContext('2d').clearRect(0,0,canvas.width,canvas.height); }
+function canvasHasSignature() { const canvas=document.getElementById('signatureCanvas'); const ctx=canvas.getContext('2d'); return ctx.getImageData(0,0,canvas.width,canvas.height).data.some((value,index)=>index%4===3&&value>0); }
+function cancelSignatureEdit() { editingSignatureId=null; document.getElementById('signatureName').value=''; document.getElementById('signatureDesignation').value=''; document.getElementById('signatureUpload').value=''; document.getElementById('signatureDefault').checked=true; clearSignatureCanvas(); document.getElementById('signatureFormHeading').textContent='Add an authorized signature'; document.getElementById('cancelSignatureEdit').hidden=true; }
+function editSignature(row) { editingSignatureId=row.id; document.getElementById('signatureName').value=row.name; document.getElementById('signatureDesignation').value=row.designation||''; document.getElementById('signatureDefault').checked=!!row.isDefault; document.getElementById('signatureUpload').value=''; clearSignatureCanvas(); document.getElementById('signatureFormHeading').textContent='Edit authorized signature'; document.getElementById('cancelSignatureEdit').hidden=false; document.getElementById('signatureName').dataset.currentImage=row.image; }
+async function signatureUploadData(file) { if(file.size>2*1024*1024) throw new Error('Signature image too large (max 2 MB).'); return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Could not read signature image.'));reader.readAsDataURL(file);}); }
+async function saveSignatureProfile() {
+  const name=document.getElementById('signatureName').value.trim();
+  if(!name) { showToast('Enter the signatory name.'); return; }
+  const file=document.getElementById('signatureUpload').files?.[0]; let image='';
+  try { image=file?await signatureUploadData(file):(canvasHasSignature()?document.getElementById('signatureCanvas').toDataURL('image/png'):document.getElementById('signatureName').dataset.currentImage||''); }
+  catch(error) { showToast(error.message); return; }
+  if(!image) { showToast('Draw or upload a signature image.'); return; }
+  const record={id:editingSignatureId||signatureId(),businessId:BUSINESS_ID,name,designation:document.getElementById('signatureDesignation').value.trim(),image,isDefault:document.getElementById('signatureDefault').checked || !defaultBusinessSignature};
+  try { await BusinessDB.saveSignature(record); cancelSignatureEdit(); await loadBusinessSignatures(); showToast('Authorized signature saved.'); }
+  catch(error) { showToast(`Could not save signature: ${error.message}`); }
+}
+async function setDefaultSignature(row) { try { await BusinessDB.saveSignature({...row,isDefault:true}); await loadBusinessSignatures(); showToast(`${row.name} is now the default signature.`); } catch(error) { showToast(`Could not set default signature: ${error.message}`); } }
+async function removeSignature(row) { if(!confirm(`Delete the signature for ${row.name}?`)) return; try { await BusinessDB.deleteSignature(row.id); if(editingSignatureId===row.id) cancelSignatureEdit(); await loadBusinessSignatures(); showToast('Signature deleted.'); } catch(error) { showToast(`Could not delete signature: ${error.message}`); } }
+async function saveSignatureSettings() {
+  try {
+    const companies=await BusinessDB.getRecords('companies'); const profile=companies.find(row=>row.id===BUSINESS_ID)||companies.sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))[0]||{id:BUSINESS_ID};
+    companySignatureSettings={autoInclude:document.getElementById('autoIncludeSignature').checked,showSignatory:document.getElementById('showSignatoryDetails').checked,documentTypes:[...document.querySelectorAll('#signatureDocumentTypes input:checked')].map(input=>input.value)};
+    await BusinessDB.putRecord('companies',{...profile,id:BUSINESS_ID,signatureSettings:companySignatureSettings,updatedAt:new Date().toISOString()}); updatePreview(); showToast('Signature settings saved.');
+  }
+  catch(error) { showToast(`Could not save signature settings: ${error.message}`); }
 }
 
 async function saveCompanyProfile() {
@@ -784,8 +886,9 @@ async function saveCompanyProfile() {
     logo=await new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error('Could not read the logo file.')); reader.readAsDataURL(image); }).catch(error=>{ showToast(error.message); return null; });
     if (logo === null) return;
   }
-  const company={id:'company:default', name:document.getElementById('profileCompanyName').value.trim(), email:document.getElementById('profileCompanyEmail').value.trim(), phone:document.getElementById('profileCompanyPhone').value.trim(), website:document.getElementById('profileCompanyWebsite').value.trim(), address:document.getElementById('profileCompanyAddress').value.trim(), logo, updatedAt:new Date().toISOString()};
   try {
+    const prior=await BusinessDB.getRecord('companies',BUSINESS_ID) || {};
+    const company={...prior,id:BUSINESS_ID, name:document.getElementById('profileCompanyName').value.trim(), email:document.getElementById('profileCompanyEmail').value.trim(), phone:document.getElementById('profileCompanyPhone').value.trim(), website:document.getElementById('profileCompanyWebsite').value.trim(), address:document.getElementById('profileCompanyAddress').value.trim(), logo, updatedAt:new Date().toISOString()};
     await BusinessDB.putRecord('companies',company);
     populateCompanyProfile(company);
     showToast('Company profile saved.');
@@ -801,7 +904,7 @@ function navigateTo(view, saveCurrent = true) {
   document.querySelectorAll('.route-view').forEach(section => { section.hidden=section.id !== `${view}View`; });
   const workspace=document.getElementById('workspacePage');
   workspace.hidden=view !== 'editor';
-  if (view === 'editor') setWorkspaceTab('edit');
+  if (view === 'editor') { setWorkspaceTab('edit'); updatePreview(); }
   document.querySelectorAll('.nav-link[data-view]').forEach(link => link.classList.toggle('is-active',link.dataset.view===view));
   if (view === 'dashboard') renderDashboard();
   if (view === 'documents') renderDocumentTable();
@@ -1237,8 +1340,9 @@ async function importBackup(event) {
   const file=event.target.files?.[0]; if(!file)return;
   try {
     const data=JSON.parse(await file.text());
-    if(data?.format!=='business_document_manager'||!Number.isInteger(data.version)||data.version<1||data.version>3||('formatVersion' in data && data.formatVersion!==1)||!data.stores||typeof data.stores!=='object') throw new Error('This file is not a supported business backup.');
-    for(const name of ['companies','parties','documents','lineItems','sequences']) {
+    if(data?.format!=='business_document_manager'||!Number.isInteger(data.version)||data.version<1||data.version>4||('formatVersion' in data && data.formatVersion!==1)||!data.stores||typeof data.stores!=='object') throw new Error('This file is not a supported business backup.');
+    if(data.version<4&&!Array.isArray(data.stores.signatures)) data.stores.signatures=[];
+    for(const name of ['companies','parties','documents','lineItems','sequences','signatures']) {
       const rows=data.stores[name];
       if(!Array.isArray(rows)||rows.some(row=>!row||typeof row!=='object'||!row.id)||new Set(rows.map(row=>row.id)).size!==rows.length) throw new Error(`Backup data for ${name} is missing, invalid or contains duplicate IDs.`);
     }
