@@ -23,12 +23,23 @@ const DOCUMENT_TYPES = {
 const SPECIFIC_FIELDS = {
   'QUOTATION': [{ id:'validUntil', label:'Valid Until', type:'date' }, { id:'acceptanceTerms', label:'Acceptance Terms', type:'textarea', placeholder:'e.g. Sign and return to accept this quotation' }],
   'ESTIMATE': [{ id:'completionPeriod', label:'Estimated Completion Period', placeholder:'e.g. 3–4 weeks' }],
-  'INVOICE': [{ id:'dueDate', label:'Payment Due Date', type:'date' }, { id:'amountReceived', label:'Amount Received', type:'number' }, { id:'paymentMethod', label:'Payment Method', placeholder:'e.g. Bank transfer' }, { id:'transactionReference', label:'Transaction Reference' }],
+  'INVOICE': [{ id:'dueDate', label:'Payment Due Date', type:'date' }, { id:'amountReceived', label:'Amount Received', type:'number', min:'0', step:'any' }, { id:'paymentMethod', label:'Payment Method', placeholder:'e.g. Bank transfer' }, { id:'transactionReference', label:'Transaction Reference' }],
   'RECEIPT': [{ id:'paymentDate', label:'Payment Date', type:'date' }, { id:'amountPaid', label:'Amount Paid', type:'number' }, { id:'paymentMethod', label:'Payment Method', placeholder:'e.g. Bank transfer' }, { id:'transactionReference', label:'Transaction Reference' }],
   'PURCHASE ORDER': [{ id:'supplierName', label:'Supplier Name' }, { id:'supplierAddress', label:'Supplier Address', type:'textarea' }, { id:'deliveryAddress', label:'Delivery Address', type:'textarea' }, { id:'expectedDeliveryDate', label:'Expected Delivery Date', type:'date' }],
   'CREDIT NOTE': [{ id:'originalInvoice', label:'Original Invoice Reference' }, { id:'creditAmount', label:'Credit Amount', type:'number' }, { id:'creditReason', label:'Reason for Credit', type:'textarea' }],
   'DELIVERY NOTE': [{ id:'deliveryDate', label:'Delivery Date', type:'date' }, { id:'recipientConfirmation', label:'Recipient Confirmation', placeholder:'Name / signature' }]
 };
+const DOCUMENT_STATUS_OPTIONS = {
+  'QUOTATION':['Draft','Issued','Accepted','Rejected','Cancelled'],
+  'ESTIMATE':['Draft','Issued','Accepted','Rejected','Cancelled'],
+  'INVOICE':['Draft','Issued','Partially Paid','Paid','Overdue','Cancelled'],
+  'PROFORMA INVOICE':['Draft','Issued','Cancelled'],
+  'RECEIPT':['Draft','Issued','Cancelled'],
+  'PURCHASE ORDER':['Draft','Issued','Accepted','Rejected','Cancelled'],
+  'CREDIT NOTE':['Draft','Issued','Cancelled'],
+  'DELIVERY NOTE':['Draft','Issued','Cancelled']
+};
+const DELIVERY_STATUS_OPTIONS = ['Not Sent','Sent','Delivered','Viewed'];
 let currentDocumentType = 'QUOTATION';
 let specificData = {};
 let documentNumbers = {};
@@ -49,6 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     await BusinessDB.open();
     await BusinessDB.migrateLegacy();
+    await BusinessDB.migrateStatuses();
     await loadCompanyProfile();
     await loadDocument();
     await navigateTo('dashboard', false);
@@ -90,9 +102,10 @@ function onDocumentTypeChange() {
   document.title = `IMC Technology | ${DOCUMENT_TYPES[type]?.title || 'Document'} Builder`;
   if (activeDocumentId) { activeSourceId = activeDocumentId; activeSourceNumber = document.getElementById('documentNumber').value; }
   activeDocumentId = null;
-  activeStatus = type === 'INVOICE' ? 'Unpaid' : 'Draft';
+  activeStatus = 'Draft';
   document.getElementById('documentNumber').value = 'Assigning number…';
   renderStatusOptions(type, activeStatus);
+  renderDeliveryStatusOptions('Not Sent');
   renderDocumentSpecificFields(type, specificData);
   refreshDocumentActions();
   const terms = document.getElementById('terms');
@@ -103,17 +116,75 @@ function onDocumentTypeChange() {
 
 function renderStatusOptions(type, selected = 'Draft') {
   const select = document.getElementById('documentStatus');
-  const values = type === 'QUOTATION' ? ['Draft','Sent','Accepted','Rejected','Expired'] : type === 'INVOICE' ? ['Unpaid','Partially Paid','Paid','Overdue'] : ['Draft','Final'];
+  const values = DOCUMENT_STATUS_OPTIONS[type] || ['Draft','Issued','Cancelled'];
   select.replaceChildren(...values.map(value => { const option = document.createElement('option'); option.value=value; option.textContent=value; return option; }));
   if (!values.includes(selected)) selected = values[0];
   select.value = selected;
   activeStatus = selected;
 }
 
+function renderDeliveryStatusOptions(selected = 'Not Sent') {
+  const select=document.getElementById('deliveryStatus');
+  select.replaceChildren(...DELIVERY_STATUS_OPTIONS.map(value=>{const option=document.createElement('option');option.value=value;option.textContent=value;return option;}));
+  select.value=DELIVERY_STATUS_OPTIONS.includes(selected)?selected:'Not Sent';
+}
+
 function onDocumentStatusChange() {
-  activeStatus = document.getElementById('documentStatus').value;
+  const selected=document.getElementById('documentStatus').value;
+  const received=Math.max(0,Number(document.getElementById('amountReceived')?.value)||0);
+  if (currentDocumentType==='INVOICE' && selected==='Paid' && getInvoiceOutstandingBalance()>0.01) {
+    document.getElementById('documentStatus').value=activeStatus;
+    showToast('Record the full invoice amount received before marking it Paid.');
+    return;
+  }
+  if (currentDocumentType==='INVOICE' && selected==='Partially Paid' && !(received>0 && getInvoiceOutstandingBalance()>0.01)) {
+    document.getElementById('documentStatus').value=activeStatus;
+    showToast('Enter an amount received that is greater than zero and less than the invoice total.');
+    return;
+  }
+  activeStatus = selected;
   refreshDocumentActions();
   updatePreview();
+}
+
+function onDeliveryStatusChange() {
+  updatePreview();
+}
+
+async function printDocument() {
+  const saved=await saveDocument(true);
+  if(saved)window.print();
+}
+
+function currentEditorTotal() {
+  const subtotal=[...document.querySelectorAll('#itemsBody tr')].reduce((sum,row)=>sum+(Number(row.querySelector('.quantity').value)||0)*(Number(row.querySelector('.price').value)||0),0);
+  const discount=Math.max(0,Number(document.getElementById('discount').value)||0);
+  const tax=Math.max(0,Number(document.getElementById('tax').value)||0);
+  return Math.max(0,subtotal-discount+tax);
+}
+
+function getInvoiceOutstandingBalance(total=currentEditorTotal(), received=Number(document.getElementById('amountReceived')?.value)||0) {
+  return Math.max(0,total-Math.max(0,received));
+}
+
+function onInvoicePaymentChange() {
+  if (currentDocumentType==='INVOICE' && activeStatus!=='Cancelled') {
+    const input=document.getElementById('amountReceived');
+    const received=Math.max(0,Number(input?.value)||0);
+    const total=currentEditorTotal();
+    if (total>0 && received>=total-0.01) activeStatus='Paid';
+    else if (received>0) activeStatus='Partially Paid';
+    else if (['Paid','Partially Paid'].includes(activeStatus)) activeStatus='Issued';
+    renderStatusOptions('INVOICE',activeStatus);
+    refreshDocumentActions();
+  }
+  updatePreview();
+}
+
+function onInvoicePaymentCommit() {
+  const input=document.getElementById('amountReceived');
+  if (input && currentDocumentType==='INVOICE') input.value=String(Math.min(Math.max(0,Number(input.value)||0),currentEditorTotal()));
+  onInvoicePaymentChange();
 }
 
 function renderDocumentSpecificFields(type, values = {}) {
@@ -132,12 +203,14 @@ function renderDocumentSpecificFields(type, values = {}) {
     } else {
       input = document.createElement(field.type === 'textarea' ? 'textarea' : 'input');
       if (field.type && field.type !== 'textarea') input.type = field.type;
+      if (field.min !== undefined) input.min = field.min;
+      if (field.step !== undefined) input.step = field.step;
       if (field.placeholder) input.placeholder = field.placeholder;
     }
     input.id = field.id;
-    input.value = values[field.id] ?? (field.id === 'paymentStatus' ? 'Unpaid' : (field.id === 'validUntil' ? document.getElementById('validUntil')?.value || '' : ''));
-    input.addEventListener('input', updatePreview);
-    input.addEventListener('change', updatePreview);
+    input.value = values[field.id] ?? (field.id === 'validUntil' ? document.getElementById('validUntil')?.value || '' : '');
+    input.addEventListener('input', field.id==='amountReceived' ? onInvoicePaymentChange : updatePreview);
+    input.addEventListener('change', field.id==='amountReceived' ? onInvoicePaymentCommit : updatePreview);
     wrapper.append(label, input);
     host.appendChild(wrapper);
   });
@@ -179,6 +252,18 @@ function formatDate(dateString) {
   return new Date(dateString + 'T00:00:00').toLocaleDateString('en-NG', {
     day: '2-digit', month: 'short', year: 'numeric'
   });
+}
+
+function renderDocumentStatusMarker(status, type) {
+  const marker=document.getElementById('previewDocumentStatus');
+  const visible={Draft:'DRAFT',Accepted:'ACCEPTED',Rejected:'REJECTED',Paid:'PAID','Partially Paid':'PARTIALLY PAID',Cancelled:'CANCELLED'};
+  const label=visible[status];
+  marker.replaceChildren();
+  marker.className='preview-status';
+  marker.hidden=!label;
+  if(!label)return;
+  marker.textContent=label;
+  marker.classList.add(`status-${status.toLowerCase().replaceAll(' ','-')}`);
 }
 
 /* ── Toast ─────────────────────────────────────────────── */
@@ -280,6 +365,20 @@ function calculateTotals() {
   document.getElementById('previewDiscount').textContent = formatCurrency(discount);
   document.getElementById('previewTax').textContent = formatCurrency(tax);
   document.getElementById('previewGrandTotal').textContent = formatCurrency(total);
+  reconcileInvoicePaymentStatus(total);
+}
+
+function reconcileInvoicePaymentStatus(total=currentEditorTotal()) {
+  if (loadingDocument || currentDocumentType!=='INVOICE' || activeStatus==='Cancelled') return;
+  if (!['Paid','Partially Paid'].includes(activeStatus)) return;
+  const received=Math.max(0,Number(document.getElementById('amountReceived')?.value)||0);
+  let next=activeStatus;
+  if (received>0) next=total>0 && received>=total-0.01 ? 'Paid' : 'Partially Paid';
+  else next='Issued';
+  if (next===activeStatus) return;
+  activeStatus=next;
+  renderStatusOptions('INVOICE',next);
+  refreshDocumentActions();
 }
 
 function onCurrencyChange() {
@@ -339,10 +438,11 @@ function updatePreview() {
 
   const type = get('documentType');
   const config = DOCUMENT_TYPES[type] || DOCUMENT_TYPES.QUOTATION;
+  reconcileInvoicePaymentStatus();
   document.getElementById('previewDocumentType').textContent = config.title.toUpperCase();
   document.getElementById('previewNumberLabel').textContent = config.numberLabel;
   document.getElementById('previewDocumentNumber').textContent = get('documentNumber');
-  document.getElementById('previewDocumentStatus').textContent = activeStatus || get('documentStatus');
+  renderDocumentStatusMarker(activeStatus || get('documentStatus'), type);
   document.getElementById('previewDocumentDate').textContent = formatDate(get('documentDate'));
   const metaRows = document.getElementById('previewMetaRows');
   metaRows.replaceChildren();
@@ -358,10 +458,15 @@ function updatePreview() {
     if (!value) return;
     const row = document.createElement('div');
     const label = labels[field.id] || field.label;
-    const display = field.type === 'date' ? formatDate(value) : (field.id === 'amountPaid' ? formatCurrency(Number(value)) : value);
+    const display = field.type === 'date' ? formatDate(value) : (['amountPaid','amountReceived','creditAmount'].includes(field.id) ? formatCurrency(Number(value)) : value);
     row.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(display)}`;
     metaRows.appendChild(row);
   });
+  if(type==='INVOICE' && Number(values.amountReceived)>0 && Number(values.amountReceived)<currentEditorTotal()-0.01) {
+    const balanceRow=document.createElement('div');
+    balanceRow.innerHTML=`<strong>Outstanding Balance:</strong> ${escapeHtml(formatCurrency(getInvoiceOutstandingBalance()))}`;
+    metaRows.appendChild(balanceRow);
+  }
 
   document.getElementById('previewProjectName').textContent = get('projectName') || '—';
   document.getElementById('previewScopeOfWork').textContent = get('scopeOfWork') || '—';
@@ -420,7 +525,8 @@ function scheduleAutosave() {
 function collectDocumentData() {
   const data = {
     id: activeDocumentId,
-    status: document.getElementById('documentStatus').value || activeStatus,
+    status: activeStatus || document.getElementById('documentStatus').value || 'Draft',
+    deliveryStatus: document.getElementById('deliveryStatus').value || 'Not Sent',
     sourceId: activeSourceId,
     sourceNumber: activeSourceNumber,
     company: {
@@ -484,6 +590,7 @@ function saveDocument(silent) {
       activeDocumentId = saved.id;
       currentDocumentType = saved.type;
       activeStatus = saved.status;
+      renderDeliveryStatusOptions(saved.deliveryStatus);
       document.getElementById('documentNumber').value = saved.number;
       document.getElementById('previewDocumentNumber').textContent = saved.number;
       document.getElementById('previewDocumentType').textContent = (DOCUMENT_TYPES[saved.type]?.title || saved.type).toUpperCase();
@@ -542,7 +649,8 @@ async function loadDocumentData(data) {
 
   currentDocumentType = document.getElementById('documentType').value;
   activeDocumentSignature = data.document?.signature ? { ...data.document.signature } : getAutoIncludedSignature(currentDocumentType);
-  activeStatus = data.status || (currentDocumentType === 'INVOICE' ? 'Unpaid' : 'Draft');
+  activeStatus = data.status || 'Draft';
+  renderDeliveryStatusOptions(data.deliveryStatus || 'Not Sent');
   renderStatusOptions(currentDocumentType, activeStatus);
   specificData = { ...(data.document?.specific || {}) };
   if (!specificData.validUntil && data.document?.validUntil) specificData.validUntil = data.document.validUntil;
@@ -577,6 +685,7 @@ async function loadDocument() {
   applyLogoPreview();
   currentDocumentType = 'QUOTATION';
   renderStatusOptions(currentDocumentType, 'Draft');
+  renderDeliveryStatusOptions('Not Sent');
   const firstExpiry = new Date(); firstExpiry.setDate(firstExpiry.getDate()+30);
   specificData = { validUntil:firstExpiry.toISOString().slice(0,10) };
   renderDocumentSpecificFields(currentDocumentType, specificData);
@@ -833,12 +942,20 @@ function documentActionButton(label, action, doc) {
   button.onclick=()=>action(doc); return button;
 }
 
+function statusBadge(status, delivery=false) {
+  const value=status || (delivery?'Not Sent':'Draft');
+  const badge=document.createElement('span');
+  badge.className=`status-badge ${delivery?'delivery-badge':'status'}-${String(value).toLowerCase().replaceAll(' ','-')}`;
+  badge.textContent=value;
+  return badge;
+}
+
 async function renderDashboard() {
   try {
     cachedDocuments=await BusinessDB.listDocuments();
     const parties=await BusinessDB.getRecords('parties');
     const customers=new Set(cachedDocuments.map(doc=>doc.client?.name?.trim()).filter(Boolean));
-    const summary=[['Documents',cachedDocuments.length,'Across all document types'],['Customers',Math.max(customers.size,parties.filter(row=>row.kind==='customer').length),'From saved records'],['Open invoices',cachedDocuments.filter(doc=>doc.type==='INVOICE'&&doc.status!=='Paid').length,'Awaiting payment'],['Purchase orders',cachedDocuments.filter(doc=>doc.type==='PURCHASE ORDER').length,'Supplier orders']];
+    const summary=[['Documents',cachedDocuments.length,'Across all document types'],['Customers',Math.max(customers.size,parties.filter(row=>row.kind==='customer').length),'From saved records'],['Open invoices',cachedDocuments.filter(doc=>doc.type==='INVOICE'&&!['Paid','Cancelled'].includes(doc.status)).length,'Awaiting payment'],['Purchase orders',cachedDocuments.filter(doc=>doc.type==='PURCHASE ORDER').length,'Supplier orders']];
     const host=document.getElementById('dashboardSummary'); host.replaceChildren();
     summary.forEach(([title,value,caption])=>{const card=document.createElement('article');card.className='summary-card';const name=document.createElement('div');name.className='summary-label';name.textContent=title;const amount=document.createElement('strong');amount.textContent=value;const note=document.createElement('span');note.textContent=caption;card.append(name,amount,note);host.appendChild(card);});
     const recent=document.getElementById('dashboardRecent'); recent.replaceChildren();
@@ -850,7 +967,7 @@ async function renderDashboard() {
 function makeDocumentTable(docs, includeType = true) {
   const wrap=document.createElement('div');wrap.className='responsive-table-wrap';
   const table=document.createElement('table');table.className='data-table';
-  const headers=['Document','Customer',...(includeType?['Type']:[]),'Date','Amount','Status','Actions'];
+  const headers=['Document','Customer',...(includeType?['Type']:[]),'Date','Amount','Document Status','Delivery Status','Actions'];
   const thead=document.createElement('thead'),headRow=document.createElement('tr');
   headers.forEach(label=>{const th=document.createElement('th');th.textContent=label;headRow.appendChild(th);});thead.appendChild(headRow);table.appendChild(thead);
   const tbody=document.createElement('tbody');
@@ -862,9 +979,10 @@ function makeDocumentTable(docs, includeType = true) {
     if(includeType){const type=document.createElement('td');type.dataset.label='Type';type.textContent=DOCUMENT_TYPES[doc.type]?.title || doc.type;cells.push(type);}
     const date=document.createElement('td');date.dataset.label='Date';date.textContent=dateForList(doc.document?.date);
     const amount=document.createElement('td');amount.dataset.label='Amount';amount.textContent=moneyForDocument(doc);
-    const status=document.createElement('td');status.dataset.label='Status';const badge=document.createElement('span');badge.className=`status-badge status-${String(doc.status||'draft').toLowerCase().replaceAll(' ','-')}`;badge.textContent=doc.status||'Draft';status.appendChild(badge);
+    const status=document.createElement('td');status.dataset.label='Document Status';status.appendChild(statusBadge(doc.status));
+    const delivery=document.createElement('td');delivery.dataset.label='Delivery Status';delivery.appendChild(statusBadge(doc.deliveryStatus,true));
     const actions=document.createElement('td');actions.dataset.label='Actions';actions.className='row-table-actions';actions.append(documentActionButton('View',row=>viewDocumentById(row.id),doc),documentActionButton('Edit',row=>openDocumentById(row.id),doc),documentActionButton('Duplicate',duplicateDocument,doc),documentActionButton('Delete',deleteDocumentById,doc));
-    row.append(...cells,date,amount,status,actions);tbody.appendChild(row);
+    row.append(...cells,date,amount,status,delivery,actions);tbody.appendChild(row);
   });
   table.appendChild(tbody);wrap.appendChild(table);return wrap;
 }
@@ -874,8 +992,10 @@ async function renderDocumentTable() {
     cachedDocuments=await BusinessDB.listDocuments();
     const filter=document.getElementById('documentTypeFilter');
     if(filter.options.length===1) Object.keys(DOCUMENT_TYPES).forEach(type=>{const option=document.createElement('option');option.value=type;option.textContent=DOCUMENT_TYPES[type].title;filter.appendChild(option);});
-    const query=(document.getElementById('documentSearch').value||'').trim().toLowerCase(), type=filter.value;
-    const docs=cachedDocuments.filter(doc=>(!type||doc.type===type)&&(!query||[doc.number,doc.client?.name,doc.type,DOCUMENT_TYPES[doc.type]?.title,doc.status].some(value=>String(value||'').toLowerCase().includes(query))));
+    const statusFilter=document.getElementById('documentStatusFilter');
+    if(statusFilter.options.length===1) [...new Set(Object.values(DOCUMENT_STATUS_OPTIONS).flat())].forEach(status=>{const option=document.createElement('option');option.value=status;option.textContent=status;statusFilter.appendChild(option);});
+    const query=(document.getElementById('documentSearch').value||'').trim().toLowerCase(), type=filter.value, documentStatus=statusFilter.value;
+    const docs=cachedDocuments.filter(doc=>(!type||doc.type===type)&&(!documentStatus||doc.status===documentStatus)&&(!query||[doc.number,doc.client?.name,doc.type,DOCUMENT_TYPES[doc.type]?.title,doc.status,doc.deliveryStatus].some(value=>String(value||'').toLowerCase().includes(query))));
     const host=document.getElementById('allDocumentsList');host.replaceChildren();
     if(!docs.length){const empty=document.createElement('div');empty.className='empty-state';empty.innerHTML='<div class="empty-icon" aria-hidden="true">▤</div><h3>No matching documents</h3><p>Try another search or clear the filters.</p>';host.appendChild(empty);return;}
     host.appendChild(makeDocumentTable(docs,true));
@@ -923,7 +1043,7 @@ async function duplicateDocument(doc) {
       const saved=await saveDocument(true);
       if(!saved)throw new Error('Save the current document before opening another.');
     }
-    const copy=structuredClone(doc);delete copy.id;delete copy.number;delete copy.createdAt;delete copy.updatedAt;copy.document={...copy.document,number:''};copy.status=copy.type==='INVOICE'?'Unpaid':'Draft';copy.sourceId=null;copy.sourceNumber=null;
+    const copy=structuredClone(doc);delete copy.id;delete copy.number;delete copy.createdAt;delete copy.updatedAt;copy.document={...copy.document,number:'',signature:null};copy.status='Draft';copy.deliveryStatus='Not Sent';copy.sourceId=null;copy.sourceNumber=null;
     copy.document.specific={...(copy.document.specific||{}),amountReceived:'',amountPaid:'',transactionReference:'',paymentDate:''};
     const created=await BusinessDB.createDocument(copy);
     await loadDocumentData(created);navigateTo('editor',false);showToast(`Copy ${created.number} created.`);
@@ -1027,7 +1147,8 @@ async function convertDocument(kind) {
     converted.document = { ...converted.document, type:destination, number:'', specific:{ ...(converted.document?.specific || {}) } };
     converted.document.signature = getAutoIncludedSignature(destination);
     converted.type = destination; converted.sourceId = source.id; converted.sourceNumber = source.number;
-    converted.status = destination === 'INVOICE' ? 'Unpaid' : 'Draft';
+    converted.status = destination === 'INVOICE' ? 'Issued' : 'Draft';
+    converted.deliveryStatus = 'Not Sent';
     let sourceUpdate = null;
     if (kind === 'receipt') {
       const paidSoFar = Number(source.document?.specific?.amountReceived) || 0;
@@ -1083,7 +1204,7 @@ async function importBackup(event) {
   const file=event.target.files?.[0]; if(!file)return;
   try {
     const data=JSON.parse(await file.text());
-    if(data?.format!=='business_document_manager'||!Number.isInteger(data.version)||data.version<1||data.version>2||('formatVersion' in data && data.formatVersion!==1)||!data.stores||typeof data.stores!=='object') throw new Error('This file is not a supported business backup.');
+    if(data?.format!=='business_document_manager'||!Number.isInteger(data.version)||data.version<1||data.version>3||('formatVersion' in data && data.formatVersion!==1)||!data.stores||typeof data.stores!=='object') throw new Error('This file is not a supported business backup.');
     for(const name of ['companies','parties','documents','lineItems','sequences']) {
       const rows=data.stores[name];
       if(!Array.isArray(rows)||rows.some(row=>!row||typeof row!=='object'||!row.id)||new Set(rows.map(row=>row.id)).size!==rows.length) throw new Error(`Backup data for ${name} is missing, invalid or contains duplicate IDs.`);
@@ -1116,10 +1237,11 @@ async function newDocument(skipConfirmation = false, type = 'QUOTATION', persist
   document.getElementById('documentType').value = type;
   currentDocumentType = type;
   activeDocumentSignature = getAutoIncludedSignature(type);
+  renderDeliveryStatusOptions('Not Sent');
   activeDocumentId = null;
   activeSourceId = null;
   activeSourceNumber = null;
-  activeStatus = type==='INVOICE' ? 'Unpaid' : 'Draft';
+  activeStatus = 'Draft';
   document.getElementById('documentHistory').replaceChildren();
   document.title = `IMC Technology | ${DOCUMENT_TYPES[type].title} Builder`;
   document.querySelector('.page-heading h1').textContent=`New ${DOCUMENT_TYPES[type].title}`;

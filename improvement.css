@@ -139,6 +139,7 @@ h1, h2, h3 { text-wrap: balance; }
   .preview { max-height: none; overflow: visible; }
   .row-actions { opacity: 1; }
 }
+
 @media (max-width: 1100px) {
   .preview { max-height: none; overflow: visible; }
 }
@@ -336,4 +337,48 @@ input[type="date"] { appearance: none; -webkit-appearance: none; min-width: 0; m
   .mobile-tabs, .back-btn, .preview-print { display: none !important; }
   #workspacePage .editor { display: none !important; }
   #workspacePage .preview { display: block !important; }
+}
+
+/* Keep the editor controls compact and consistent after the workspace layout rules. */
+.editor-toolbar { border: 1px solid var(--line); }
+.editor-toolbar-actions { align-items: center; gap: 9px; }
+.editor-toolbar .document-action { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 42px; padding: 9px 14px; border-radius: 9px; font-size: 12px; font-weight: 750; }
+.editor-toolbar .document-action svg, .mobile-tabs button svg { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.editor-toolbar .document-action.btn-primary { background: var(--primary); color: #fff; }
+.editor-toolbar .document-action.btn-primary:hover { background: var(--primary-dark); }
+.mobile-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+@media (max-width: 700px) {
+  .editor-toolbar { flex-direction: row; align-items: center; justify-content: space-between; padding: 8px; }
+  .editor-toolbar-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; flex: 1; }
+  .editor-toolbar-actions .document-action:last-child { grid-column: auto; }
+  .editor-toolbar .document-action { min-height: 42px; padding: 8px 9px; gap: 7px; font-size: 12px; }
+  .save-status { flex: none; padding-left: 4px; text-align: right; font-size: 10px; }
+}
+@media (max-width: 380px) {
+  .editor-toolbar { align-items: stretch; flex-direction: column; }
+  .editor-toolbar-actions { width: 100%; }
+  .save-status { padding: 0; text-align: center; }
+}
+
+.preview-status[hidden] { display: none; }
+.preview-status.status-draft { background: #eef1ef; color: #4c5c53; border: 1px solid #cbd5ce; }
+.preview-status.status-paid { background: #e1f2e7; color: #17613a; border: 1px solid #91c8a4; }
+.preview-status.status-partially-paid { background: #fff4dc; color: #805c10; border: 1px solid #e8ca7e; }
+.preview-status.status-cancelled { background: #a73535; color: #fff; border: 1px solid #8e2b2b; }
+.preview-status.status-accepted { background: #e5f3e9; color: #2b6841; }
+.preview-status.status-rejected { background: #fbe9e7; color: #923b35; }
+.preview-status { padding: 5px 10px; font-size: 10px; font-weight: 900; letter-spacing: .08em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.status-badge.status-draft { background: #eef1ef; color: #4c5c53; }
+.status-badge.status-issued { background: #e7f0fb; color: #315c88; }
+.status-badge.status-partially-paid { background: #fff4dc; color: #805c10; }
+.status-badge.status-cancelled { background: #fbe9e7; color: #923b35; }
+.status-badge.delivery-badge-not-sent { background: #eef1ef; color: #58675f; }
+.status-badge.delivery-badge-sent, .status-badge.delivery-badge-delivered, .status-badge.delivery-badge-viewed { background: #e7f0fb; color: #315c88; }
+.data-table .status-badge { padding: 4px 7px; font-size: 9px; }
+
+/* Mobile Safari zooms the page when a focused text control uses smaller type. */
+@media (max-width: 700px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  textarea,
+  select { font-size: 16px; }
 }
