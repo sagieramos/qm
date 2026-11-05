@@ -61,6 +61,20 @@
   </div><div class="field profile-address"><label for="profileCompanyAddress">Address</label><textarea id="profileCompanyAddress"></textarea></div>
     <div class="field profile-address"><label for="profileCompanyLogo">Company logo</label><input id="profileCompanyLogo" type="file" accept="image/*"><span class="help-text">Optional image, up to 2 MB.</span><img id="profileLogoPreview" class="profile-logo-preview" alt="Company logo preview"></div>
   </div>
+  <section class="signature-settings">
+    <div class="panel-heading"><div><h2>Authorized signatures</h2><p>Create signatures for this business and choose one default authorized signer.</p></div></div>
+    <div class="signature-create grid">
+      <div class="field"><label for="signatureName">Signer name</label><input id="signatureName" autocomplete="name" placeholder="Name as it should appear"></div>
+      <div class="field"><label for="signatureRole">Role / title</label><input id="signatureRole" placeholder="e.g. Managing Director"></div>
+      <div class="field"><label for="signatureMethod">Creation method</label><select id="signatureMethod" onchange="setSignatureMethod()"><option value="typed">Type name</option><option value="drawn">Draw signature</option><option value="uploaded">Upload image</option></select></div>
+      <div class="field signature-input" id="typedSignatureInput"><label for="typedSignature">Signature text</label><input id="typedSignature" placeholder="Type signature" oninput="renderSignatureList()"></div>
+    </div>
+    <div class="signature-input" id="drawnSignatureInput" hidden><label for="signatureCanvas">Draw signature</label><canvas id="signatureCanvas" width="720" height="180" aria-label="Draw signature here"></canvas><div class="signature-tools"><button class="btn btn-secondary" type="button" onclick="clearSignatureCanvas()">Clear drawing</button></div></div>
+    <div class="signature-input field" id="uploadedSignatureInput" hidden><label for="signatureImageFile">Upload signature image</label><input id="signatureImageFile" type="file" accept="image/png,image/jpeg,image/webp"></div>
+    <button class="btn btn-secondary" type="button" onclick="createAuthorizedSignature()">＋ Add authorized signature</button>
+    <div id="authorizedSignatureList" class="authorized-signature-list"></div>
+    <fieldset class="signature-type-settings"><legend>Automatically include the default signature</legend><p class="help-text">Choose the document types that should show the default authorized signature in the preview and printout.</p><div id="signatureDocumentTypes" class="signature-type-grid"></div></fieldset>
+  </section>
 </section>
 
 <section class="route-view" id="settingsView" hidden>
@@ -348,6 +362,7 @@ Work commencement is subject to the agreed payment terms.</textarea>
 </div>
 
 <div class="document-footer">
+  <div id="previewAuthorizedSignature" class="document-authorized-signature" hidden></div>
   <strong>IMC Technology</strong><br>
   Solar Energy • Inverter Systems • Battery Storage • Electrical Solutions<br>
   Thank you for your business.

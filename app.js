@@ -38,6 +38,9 @@ let loadingDocument = false;
 let activeSourceId = null;
 let activeSourceNumber = null;
 let actionRenderId = 0;
+let companyProfileData = {};
+let signatureCanvasDirty = false;
+let activeDocumentSignature = null;
 
 /* ── Init ──────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -65,6 +68,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       });
     });
+    setupSignatureCanvas();
+    renderSignatureTypeOptions();
   } catch (error) {
     showToast(`Local database error: ${error.message}`);
   }
@@ -81,6 +86,7 @@ function onDocumentTypeChange() {
   documentNumbers[previousType] = document.getElementById('documentNumber').value;
   const type = document.getElementById('documentType').value;
   currentDocumentType = type;
+  activeDocumentSignature = getAutoIncludedSignature(type);
   document.title = `IMC Technology | ${DOCUMENT_TYPES[type]?.title || 'Document'} Builder`;
   if (activeDocumentId) { activeSourceId = activeDocumentId; activeSourceNumber = document.getElementById('documentNumber').value; }
   activeDocumentId = null;
@@ -384,6 +390,8 @@ function updatePreview() {
   });
   supplemental.hidden = supplemental.childElementCount === 0;
 
+  renderDocumentSignature(type);
+
   const previewBody = document.getElementById('previewItemsBody');
   previewBody.innerHTML = '';
   document.querySelectorAll('#itemsBody tr').forEach((row, index) => {
@@ -416,12 +424,16 @@ function collectDocumentData() {
     sourceId: activeSourceId,
     sourceNumber: activeSourceNumber,
     company: {
+      id: 'company:default',
       name: document.getElementById('companyName').value,
       email: document.getElementById('companyEmail').value,
       phone: document.getElementById('companyPhone').value,
       website: document.getElementById('companyWebsite').value,
       address: document.getElementById('companyAddress').value,
-      logo: companyLogoData
+      logo: companyLogoData,
+      signatures: companyProfileData.signatures || [],
+      defaultSignatureId: companyProfileData.defaultSignatureId || '',
+      autoSignatureTypes: companyProfileData.autoSignatureTypes || []
     },
     document: {
       type: document.getElementById('documentType').value,
@@ -429,7 +441,8 @@ function collectDocumentData() {
       date: document.getElementById('documentDate').value,
       validUntil: getSpecificValues().validUntil || '',
       currency: document.getElementById('currency').value,
-      specific: { ...specificData, ...getSpecificValues() }
+      specific: { ...specificData, ...getSpecificValues() },
+      signature: activeDocumentSignature ? { ...activeDocumentSignature } : null
     },
     project: {
       name: document.getElementById('projectName').value,
@@ -528,6 +541,7 @@ async function loadDocumentData(data) {
   document.getElementById('terms').value = data.terms || '';
 
   currentDocumentType = document.getElementById('documentType').value;
+  activeDocumentSignature = data.document?.signature ? { ...data.document.signature } : getAutoIncludedSignature(currentDocumentType);
   activeStatus = data.status || (currentDocumentType === 'INVOICE' ? 'Unpaid' : 'Draft');
   renderStatusOptions(currentDocumentType, activeStatus);
   specificData = { ...(data.document?.specific || {}) };
@@ -559,6 +573,7 @@ async function loadDocument() {
   document.getElementById('companyWebsite').value=profile.website||'';
   document.getElementById('companyAddress').value=profile.address||'';
   companyLogoData=profile.logo||'';
+  activeDocumentSignature = getAutoIncludedSignature('QUOTATION');
   applyLogoPreview();
   currentDocumentType = 'QUOTATION';
   renderStatusOptions(currentDocumentType, 'Draft');
@@ -573,6 +588,11 @@ async function loadDocument() {
 }
 
 function populateCompanyProfile(company = {}) {
+  companyProfileData = {
+    ...company,
+    signatures: Array.isArray(company.signatures) ? company.signatures : [],
+    autoSignatureTypes: Array.isArray(company.autoSignatureTypes) ? company.autoSignatureTypes : []
+  };
   const values = {
     profileCompanyName:company.name || 'IMC Technology', profileCompanyEmail:company.email || '',
     profileCompanyPhone:company.phone || '', profileCompanyWebsite:company.website || '',
@@ -583,6 +603,8 @@ function populateCompanyProfile(company = {}) {
   if (preview) { preview.src=company.logo || ''; preview.hidden=!company.logo; }
   const file=document.getElementById('profileCompanyLogo');
   if (file) file.dataset.logo=company.logo || '';
+  renderSignatureList();
+  renderSignatureTypeOptions();
 }
 
 async function loadCompanyProfile() {
@@ -601,12 +623,147 @@ async function saveCompanyProfile() {
     logo=await new Promise((resolve,reject)=>{ const reader=new FileReader(); reader.onload=()=>resolve(reader.result); reader.onerror=()=>reject(new Error('Could not read the logo file.')); reader.readAsDataURL(image); }).catch(error=>{ showToast(error.message); return null; });
     if (logo === null) return;
   }
-  const company={id:'company:default', name:document.getElementById('profileCompanyName').value.trim(), email:document.getElementById('profileCompanyEmail').value.trim(), phone:document.getElementById('profileCompanyPhone').value.trim(), website:document.getElementById('profileCompanyWebsite').value.trim(), address:document.getElementById('profileCompanyAddress').value.trim(), logo, updatedAt:new Date().toISOString()};
+  const company={...companyProfileData, id:'company:default', name:document.getElementById('profileCompanyName').value.trim(), email:document.getElementById('profileCompanyEmail').value.trim(), phone:document.getElementById('profileCompanyPhone').value.trim(), website:document.getElementById('profileCompanyWebsite').value.trim(), address:document.getElementById('profileCompanyAddress').value.trim(), logo, updatedAt:new Date().toISOString()};
   try {
     await BusinessDB.putRecord('companies',company);
     populateCompanyProfile(company);
+    if (currentView === 'editor') updatePreview();
     showToast('Company profile saved.');
   } catch(error) { showToast(`Could not save company profile: ${error.message}`); }
+}
+
+function setupSignatureCanvas() {
+  const canvas=document.getElementById('signatureCanvas');
+  if (!canvas) return;
+  const ctx=canvas.getContext('2d');
+  ctx.lineWidth=3; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#173d2e';
+  let drawing=false;
+  const point=event=>{ const rect=canvas.getBoundingClientRect(); return { x:(event.clientX-rect.left)*canvas.width/rect.width, y:(event.clientY-rect.top)*canvas.height/rect.height }; };
+  canvas.addEventListener('pointerdown',event=>{ drawing=true; canvas.setPointerCapture(event.pointerId); const p=point(event); ctx.beginPath(); ctx.arc(p.x,p.y,1.5,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.moveTo(p.x,p.y); signatureCanvasDirty=true; });
+  canvas.addEventListener('pointermove',event=>{ if(!drawing)return; const p=point(event); ctx.lineTo(p.x,p.y); ctx.stroke(); });
+  const finish=()=>{ if(drawing){drawing=false;ctx.closePath();} };
+  canvas.addEventListener('pointerup',finish); canvas.addEventListener('pointercancel',finish);
+}
+
+function setSignatureMethod() {
+  const method=document.getElementById('signatureMethod').value;
+  document.getElementById('typedSignatureInput').hidden=method!=='typed';
+  document.getElementById('drawnSignatureInput').hidden=method!=='drawn';
+  document.getElementById('uploadedSignatureInput').hidden=method!=='uploaded';
+}
+
+function clearSignatureCanvas() {
+  const canvas=document.getElementById('signatureCanvas');
+  canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+  signatureCanvasDirty=false;
+}
+
+function signatureDataUrlFromCanvas() {
+  const canvas=document.getElementById('signatureCanvas');
+  if (!signatureCanvasDirty) return '';
+  const trimmed=document.createElement('canvas');
+  const ctx=trimmed.getContext('2d');
+  trimmed.width=canvas.width; trimmed.height=canvas.height;
+  ctx.drawImage(canvas,0,0);
+  return trimmed.toDataURL('image/png');
+}
+
+async function createAuthorizedSignature() {
+  const name=document.getElementById('signatureName').value.trim();
+  const role=document.getElementById('signatureRole').value.trim();
+  const method=document.getElementById('signatureMethod').value;
+  if (!name) { showToast('Enter the authorized signer’s name.'); return; }
+  let image=''; let text='';
+  if (method==='typed') {
+    text=document.getElementById('typedSignature').value.trim() || name;
+  } else if (method==='drawn') {
+    image=signatureDataUrlFromCanvas();
+    if (!image) { showToast('Draw the signature before adding it.'); return; }
+  } else {
+    const file=document.getElementById('signatureImageFile').files?.[0];
+    if (!file) { showToast('Choose a signature image to upload.'); return; }
+    if (file.size>1024*1024) { showToast('Signature image is too large (max 1 MB).'); return; }
+    image=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('Could not read the signature image.'));reader.readAsDataURL(file);}).catch(error=>{showToast(error.message);return '';});
+    if (!image) return;
+  }
+  const sig={id:`signature:${crypto.randomUUID?.() || Date.now()}`,name,role,method,text,image,createdAt:new Date().toISOString()};
+  companyProfileData.signatures=[...(companyProfileData.signatures||[]),sig];
+  if (!companyProfileData.defaultSignatureId) companyProfileData.defaultSignatureId=sig.id;
+  await persistCompanySignatureSettings('Authorized signature added.');
+  document.getElementById('signatureName').value=''; document.getElementById('signatureRole').value=''; document.getElementById('typedSignature').value='';
+  document.getElementById('signatureImageFile').value=''; clearSignatureCanvas();
+}
+
+function renderSignatureList() {
+  const host=document.getElementById('authorizedSignatureList');
+  if (!host) return;
+  host.replaceChildren();
+  const signatures=companyProfileData.signatures||[];
+  signatures.forEach(signature=>{
+    const row=document.createElement('article'); row.className='authorized-signature';
+    const details=document.createElement('div'); details.className='authorized-signature-details';
+    const title=document.createElement('strong'); title.textContent=signature.name;
+    const role=document.createElement('span'); role.textContent=signature.role || 'Authorized signer'; details.append(title,role);
+    const visual=document.createElement('div'); visual.className='signature-sample';
+    if(signature.image){const img=document.createElement('img');img.src=signature.image;img.alt=`Signature of ${signature.name}`;visual.appendChild(img);}
+    else {const typed=document.createElement('span');typed.textContent=signature.text||signature.name;typed.className='typed-signature';visual.appendChild(typed);}
+    const actions=document.createElement('div'); actions.className='signature-row-actions';
+    const isDefault=companyProfileData.defaultSignatureId===signature.id;
+    const label=document.createElement('label'); label.className='signature-default-label';
+    const radio=document.createElement('input');radio.type='radio';radio.name='defaultAuthorizedSignature';radio.checked=isDefault;radio.setAttribute('aria-label',`Set ${signature.name} as default authorized signature`);radio.onchange=()=>{companyProfileData.defaultSignatureId=signature.id;persistCompanySignatureSettings('Default authorized signature updated.');};
+    label.append(radio,document.createTextNode('Default'));
+    const remove=document.createElement('button');remove.type='button';remove.className='table-action';remove.textContent='Remove';remove.onclick=()=>removeAuthorizedSignature(signature.id);
+    actions.append(label,remove); row.append(details,visual,actions); host.appendChild(row);
+  });
+  if (!signatures.length) {const empty=document.createElement('p');empty.className='help-text';empty.textContent='No authorized signatures have been added.';host.appendChild(empty);}
+}
+
+async function removeAuthorizedSignature(id) {
+  companyProfileData.signatures=(companyProfileData.signatures||[]).filter(signature=>signature.id!==id);
+  if(companyProfileData.defaultSignatureId===id) companyProfileData.defaultSignatureId=companyProfileData.signatures[0]?.id || '';
+  await persistCompanySignatureSettings('Authorized signature removed.');
+}
+
+function renderSignatureTypeOptions() {
+  const host=document.getElementById('signatureDocumentTypes');
+  if(!host)return;
+  host.replaceChildren();
+  Object.entries(DOCUMENT_TYPES).forEach(([type,config])=>{
+    const label=document.createElement('label'); label.className='signature-type-option';
+    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.value=type;checkbox.checked=(companyProfileData.autoSignatureTypes||[]).includes(type);checkbox.onchange=()=>{
+      const enabled=new Set(companyProfileData.autoSignatureTypes||[]); checkbox.checked?enabled.add(type):enabled.delete(type); companyProfileData.autoSignatureTypes=[...enabled];
+      persistCompanySignatureSettings('Automatic signature settings saved.');
+    };
+    label.append(checkbox,document.createTextNode(config.title)); host.appendChild(label);
+  });
+}
+
+async function persistCompanySignatureSettings(message) {
+  companyProfileData={...companyProfileData,id:'company:default',updatedAt:new Date().toISOString()};
+  try { await BusinessDB.putRecord('companies',companyProfileData); renderSignatureList();renderSignatureTypeOptions();if(currentView==='editor')updatePreview();if(message)showToast(message); }
+  catch(error){showToast(`Could not save signature settings: ${error.message}`);}
+}
+
+function getAutoIncludedSignature(type) {
+  const enabled=(companyProfileData.autoSignatureTypes||[]).includes(type);
+  const signature=(companyProfileData.signatures||[]).find(item=>item.id===companyProfileData.defaultSignatureId);
+  return enabled&&signature?{...signature}:null;
+}
+
+function renderDocumentSignature(type) {
+  const host=document.getElementById('previewAuthorizedSignature');
+  if(!host)return;
+  host.replaceChildren(); host.hidden=!activeDocumentSignature;
+  if(!activeDocumentSignature)return;
+  const signature=activeDocumentSignature;
+  const visual=document.createElement('div');visual.className='document-signature-visual';
+  if(signature.image){const image=document.createElement('img');image.src=signature.image;image.alt=`Signature of ${signature.name}`;visual.appendChild(image);}
+  else {const typed=document.createElement('span');typed.className='typed-signature';typed.textContent=signature.text||signature.name;visual.appendChild(typed);}
+  const line=document.createElement('div');line.className='document-signature-line';
+  const name=document.createElement('strong');name.textContent=signature.name;
+  line.appendChild(name);
+  if(signature.role){const role=document.createElement('span');role.textContent=signature.role;line.appendChild(role);}
+  host.append(visual,line);
 }
 
 function navigateTo(view, saveCurrent = true) {
@@ -868,6 +1025,7 @@ async function convertDocument(kind) {
     const converted = structuredClone(source);
     delete converted.id; delete converted.number; delete converted.createdAt; delete converted.updatedAt; delete converted.items;
     converted.document = { ...converted.document, type:destination, number:'', specific:{ ...(converted.document?.specific || {}) } };
+    converted.document.signature = getAutoIncludedSignature(destination);
     converted.type = destination; converted.sourceId = source.id; converted.sourceNumber = source.number;
     converted.status = destination === 'INVOICE' ? 'Unpaid' : 'Draft';
     let sourceUpdate = null;
@@ -957,6 +1115,7 @@ async function newDocument(skipConfirmation = false, type = 'QUOTATION', persist
 
   document.getElementById('documentType').value = type;
   currentDocumentType = type;
+  activeDocumentSignature = getAutoIncludedSignature(type);
   activeDocumentId = null;
   activeSourceId = null;
   activeSourceNumber = null;
