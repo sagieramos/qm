@@ -48,7 +48,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     await BusinessDB.migrateLegacy();
     await loadCompanyProfile();
     await loadDocument();
-      await navigateTo('dashboard', false);
+    await navigateTo('dashboard', false);
+    document.querySelectorAll('.editor .section-title').forEach(title => {
+      title.tabIndex = 0;
+      title.setAttribute('role', 'button');
+      title.setAttribute('aria-expanded', 'true');
+      const toggleSection = () => {
+        const collapsed = title.parentElement.classList.toggle('is-collapsed');
+        title.setAttribute('aria-expanded', String(!collapsed));
+      };
+      title.addEventListener('click', toggleSection);
+      title.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleSection();
+        }
+      });
+    });
   } catch (error) {
     showToast(`Local database error: ${error.message}`);
   }
@@ -598,9 +614,11 @@ function navigateTo(view, saveCurrent = true) {
     return saveDocument(true).then(saved => { if (saved) navigateTo(view, false); });
   }
   currentView=view;
+  document.body.classList.toggle('in-editor', view === 'editor');
   document.querySelectorAll('.route-view').forEach(section => { section.hidden=section.id !== `${view}View`; });
   const workspace=document.getElementById('workspacePage');
   workspace.hidden=view !== 'editor';
+  if (view === 'editor') setWorkspaceTab('edit');
   document.querySelectorAll('.nav-link[data-view]').forEach(link => link.classList.toggle('is-active',link.dataset.view===view));
   if (view === 'dashboard') renderDashboard();
   if (view === 'documents') renderDocumentTable();
@@ -609,14 +627,27 @@ function navigateTo(view, saveCurrent = true) {
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+function setWorkspaceTab(tab) {
+  const workspace = document.getElementById('workspacePage');
+  if (!workspace || (tab !== 'edit' && tab !== 'preview')) return;
+  workspace.dataset.tab = tab;
+  document.getElementById('editTab').setAttribute('aria-selected', String(tab === 'edit'));
+  document.getElementById('previewTab').setAttribute('aria-selected', String(tab === 'preview'));
+  document.getElementById('editTab').tabIndex = tab === 'edit' ? 0 : -1;
+  document.getElementById('previewTab').tabIndex = tab === 'preview' ? 0 : -1;
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
 async function showDocumentPreview() {
   const saved=await saveDocument(true);
   if (!saved) return;
   currentView='editor';
   document.getElementById('workspacePage').hidden=false;
+  document.body.classList.add('in-editor');
   document.querySelectorAll('.route-view').forEach(section=>section.hidden=true);
   document.querySelectorAll('.nav-link[data-view]').forEach(link=>link.classList.remove('is-active'));
-  document.getElementById('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
+  setWorkspaceTab('preview');
+  if (!window.matchMedia('(max-width: 1100px)').matches) document.getElementById('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function openNewDocumentDialog() {
@@ -723,7 +754,10 @@ async function openDocumentById(id) {
 
 async function viewDocumentById(id) {
   await openDocumentById(id);
-  if (currentView==='editor') document.getElementById('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
+  if (currentView==='editor') {
+    setWorkspaceTab('preview');
+    if (!window.matchMedia('(max-width: 1100px)').matches) document.getElementById('documentPreview').scrollIntoView({behavior:'smooth',block:'start'});
+  }
 }
 
 async function duplicateDocument(doc) {

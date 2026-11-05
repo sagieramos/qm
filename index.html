@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>IMC Technology | Document Builder</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="improvement.css">
 </head>
 <body>
 
@@ -67,7 +68,7 @@
   <div class="panel backup-panel"><div class="panel-heading"><div><h2>Data &amp; Backup</h2><p>Export a copy of your data or merge records from another backup.</p></div></div><div class="backup-actions"><article class="backup-action"><div class="action-icon" aria-hidden="true">↓</div><div><h3>Export Backup</h3><p>Download company profiles, customers, suppliers, documents, line items and numbering sequences as JSON.</p></div><button class="btn btn-secondary" onclick="exportBackup()">Export backup</button></article><article class="backup-action"><div class="action-icon" aria-hidden="true">↑</div><div><h3>Import Backup</h3><p>Merge records from a valid business backup. Existing matching records are kept.</p></div><label class="btn btn-secondary backup-import">Choose backup<input id="backupFile" type="file" accept="application/json,.json" onchange="importBackup(event)"></label></article></div></div>
 </section>
 
-<main class="page" id="workspacePage" hidden>
+<main class="page" id="workspacePage" data-tab="edit" hidden>
 <div class="page-heading">
   <div>
     <div class="eyebrow">DOCUMENT WORKSPACE</div>
@@ -76,11 +77,16 @@
   </div>
   <div class="local-badge"><span aria-hidden="true"></span> Saved on this device</div>
 </div>
-<div class="editor">
+<button class="back-btn" type="button" onclick="navigateTo('documents')">← All documents</button>
+<div class="mobile-tabs" role="tablist" aria-label="Workspace view">
+  <button id="editTab" type="button" role="tab" aria-controls="editorPanel" aria-selected="true" tabindex="0" onclick="setWorkspaceTab('edit')">Edit</button>
+  <button id="previewTab" type="button" role="tab" aria-controls="previewPanel" aria-selected="false" tabindex="-1" onclick="setWorkspaceTab('preview')">Preview</button>
+</div>
+<div class="editor" id="editorPanel">
 <div class="editor-toolbar" aria-label="Document actions">
   <div class="editor-toolbar-actions">
     <button class="btn btn-secondary" onclick="showDocumentPreview()"><span aria-hidden="true">◉</span> Preview</button>
-    <button class="btn btn-secondary" onclick="window.print()"><span aria-hidden="true">▧</span> Print / Save PDF</button>
+    <button class="btn btn-secondary" onclick="window.print()"><span aria-hidden="true">▧</span> Print<span class="hide-sm"> / Save PDF</span></button>
     <button class="btn btn-primary" onclick="saveDocument(false)"><span aria-hidden="true">✓</span> Save</button>
   </div>
   <span class="save-status" id="saveStatus" role="status" aria-live="polite">Saved</span>
@@ -265,8 +271,8 @@ Work commencement is subject to the agreed payment terms.</textarea>
 
 </div>
 
-<div class="preview">
-<div class="preview-heading"><div><div class="eyebrow">LIVE PREVIEW</div><h2>Document preview</h2></div><span>Print ready</span></div>
+<div class="preview" id="previewPanel">
+<div class="preview-heading"><div><div class="eyebrow">LIVE PREVIEW</div><h2>Document preview</h2></div><div class="preview-heading-actions"><span>Print ready</span><button class="preview-print" type="button" onclick="window.print()">Print / PDF</button></div></div>
 <div class="document" id="documentPreview">
 
 <div class="document-header">

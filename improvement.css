@@ -1,0 +1,302 @@
+/* IMC Technology – UI refinements. Load AFTER styles.css:
+   <link rel="stylesheet" href="styles.css">
+   <link rel="stylesheet" href="improvement.css"> */
+
+:root {
+  --primary: #12704f;
+  --primary-dark: #0d4a36;
+  --accent: #e9b44c;
+  --ink: #17251f;
+  --surface: #ffffff;
+  --surface-2: #f6f9f7;
+  --line: #e1e8e3;
+  --radius-lg: 14px;
+  --radius-md: 9px;
+  --radius-sm: 6px;
+  --ring: 0 0 0 3px rgba(18, 112, 79, .22);
+  --shadow-sm: 0 1px 2px rgba(20, 45, 32, .06);
+  --shadow-md: 0 6px 20px rgba(20, 45, 32, .07);
+}
+
+body {
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "tnum" 1, "cv11" 1;   /* tabular numbers: money lines up */
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+h1, h2, h3 { text-wrap: balance; }
+
+/* ── Header: quieter, with a gold hairline ───────────── */
+.app-header {
+  background: linear-gradient(180deg, #0f4a36, #0d4130);
+  border-bottom: 2px solid var(--accent);
+  box-shadow: none;
+}
+.brand-mark { background: var(--accent); color: #2c2208; border: 0; }
+
+/* ── Sidebar: clearer active state ───────────────────── */
+.nav-link { position: relative; transition: background .15s, color .15s; }
+.nav-link.is-active { background: #e8f3ec; }
+.nav-link.is-active::before {
+  content: ""; position: absolute; left: -14px; top: 9px; bottom: 9px;
+  width: 4px; border-radius: 0 4px 4px 0; background: var(--primary);
+}
+
+/* ── Buttons ─────────────────────────────────────────── */
+.btn { transition: background .15s, box-shadow .15s, transform .15s; }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: var(--shadow-sm); }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-secondary:hover { background: var(--surface-2); border-color: #cfdcd4; }
+.btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.view-heading > .btn-primary,
+.view-heading > .btn-large { background: var(--accent); color: #2c2208; }
+.view-heading > .btn-primary:hover { background: #dba53b; }
+
+/* ── Form fields ─────────────────────────────────────── */
+.field label { font-size: 11.5px; font-weight: 700; color: #4d5f56; }
+.field input, .field textarea, .field select,
+.list-toolbar input, .list-toolbar select { font-size: 13px; border-color: #d5dfd9; }
+.field input:hover, .field textarea:hover, .field select:hover { border-color: #b9cac0; }
+.field input:focus, .field textarea:focus, .field select:focus,
+.items-table input:focus, .total-row input:focus { box-shadow: var(--ring); }
+.field input[readonly] { background: #eef3f0; color: #5c6d64; cursor: default; }
+
+/* ── Editor sections as soft cards ───────────────────── */
+.editor { padding: 0 22px 22px; }
+.editor-toolbar { margin: 0 -22px 20px; padding: 12px 22px; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.section {
+  padding: 18px; margin-bottom: 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff;
+}
+.section:last-child { margin-bottom: 0; }
+.section-title { font-size: 13.5px; }
+.document-context { background: #fff8e8; border-color: #f0dba5; }
+
+/* ── Items table: easier scanning ────────────────────── */
+.items-table tbody tr:hover { background: #f8fbf9; }
+.items-table input { background: #fff; border-color: #e6ede9; }
+.items-table input:hover { border-color: #c9d8cf; }
+.items-table .quantity, .items-table .price { text-align: right; }
+.item-total { text-align: right; padding-right: 12px; }
+.row-actions { opacity: .55; transition: opacity .15s; }
+.items-table tr:hover .row-actions, .items-table tr:focus-within .row-actions { opacity: 1; }
+.add-item { border-style: dashed; width: 100%; min-height: 42px; }
+.add-item:hover { background: #e8f3ec; }
+
+/* ── Totals ──────────────────────────────────────────── */
+.totals { background: var(--surface-2); }
+.grand-total { font-size: 19px; }
+
+/* ── Preview: fit the viewport, look like paper ──────── */
+.preview { top: 88px; max-height: calc(100vh - 104px); overflow-y: auto; scrollbar-width: thin; padding-bottom: 8px; }
+.document {
+  border-top: 5px solid var(--primary);
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 18px 44px rgba(26,55,42,.13);
+}
+.document-table tbody tr:nth-child(even) td { background: #f8faf9; }
+.document-table td:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+.preview-status { background: #e8f3ec; color: var(--primary-dark); }
+
+/* ── Dashboard & tables ──────────────────────────────── */
+.summary-card { border-top: 3px solid var(--accent); transition: box-shadow .15s; }
+.summary-card:hover { box-shadow: var(--shadow-md); }
+.summary-card:nth-child(3) { border-top-color: #d9776a; }   /* open invoices need attention */
+.summary-card strong { font-size: 28px; color: var(--ink); }
+.data-table th { position: sticky; top: 0; }
+.data-table tbody tr { transition: background .12s; }
+.data-table tbody tr:hover { background: #f3f8f5; }
+.table-action { padding: 5px 7px; border-radius: var(--radius-sm); }
+.table-action:hover { background: #e8f3ec; }
+.table-action:last-child:hover { background: #fff0ee; }
+.status-badge::before {
+  content: ""; width: 6px; height: 6px; margin: auto 6px auto 0;
+  border-radius: 50%; background: currentColor;
+}
+.empty-state { padding: 56px 20px; border: 1px dashed #cfdcd4; border-radius: var(--radius-md); }
+.customer-card { transition: box-shadow .15s, border-color .15s; }
+.customer-card:hover { border-color: #c4d8cc; box-shadow: var(--shadow-md); }
+
+/* ── Toast & dialog ──────────────────────────────────── */
+.toast { border-left: 4px solid var(--accent); }
+.new-document-dialog { border-radius: var(--radius-lg); }
+
+/* ── Save status gets a dot ──────────────────────────── */
+.save-status::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: 50%; background: #39a267; vertical-align: 1px;
+}
+.save-status[data-state="unsaved-changes"]::before { background: #d49a1f; }
+.save-status[data-state="saving..."]::before { background: #4a86ad; }
+.save-status[data-state="save-failed"]::before { background: #c4493e; }
+
+/* ── Mobile ──────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .editor { padding: 0 12px 14px; }
+  .editor-toolbar { margin: 0 -12px 14px; }
+  .section { padding: 14px 12px; }
+  .nav-link.is-active::before { left: 20%; right: 20%; top: -6px; bottom: auto; width: auto; height: 3px; border-radius: 0 0 3px 3px; }
+  .preview { max-height: none; overflow: visible; }
+  .row-actions { opacity: 1; }
+}
+@media (max-width: 1100px) {
+  .preview { max-height: none; overflow: visible; }
+}
+
+/* ── Print: keep the paper look off the page ─────────── */
+@media print {
+  .document { border-top: 0; }
+  .document-table tbody tr:nth-child(even) td { background: transparent; }
+  .preview { max-height: none; overflow: visible; }
+}
+
+
+/* ════════════════════════════════════════════════════════
+   WORKSPACE – MOBILE REDESIGN (no horizontal scroll)
+   Root causes fixed:
+   1. Items table had min-width:760px  → rows become stacked cards
+   2. Preview table squeezed 5 columns → line items become compact rows
+   3. iOS date inputs ignore width     → normalised
+   4. Editor card + section card nesting wasted ~50px → flattened
+   5. Toast sat behind the bottom tab bar → lifted
+   ════════════════════════════════════════════════════════ */
+
+input[type="date"] { appearance: none; -webkit-appearance: none; min-width: 0; max-width: 100%; display: block; }
+
+@media (max-width: 700px) {
+  .app-content, .app-content .page, .editor, .preview, .document { max-width: 100%; }
+
+  /* Flatten: sections are the only cards */
+  .editor { padding: 0; background: transparent; border: 0; box-shadow: none; }
+  .section { padding: 14px 12px; margin-bottom: 12px; box-shadow: var(--shadow-sm); }
+
+  /* One-row sticky action bar */
+  .editor-toolbar {
+    top: 8px; margin: 0 0 12px; padding: 8px;
+    border: 1px solid var(--line); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md); gap: 6px;
+  }
+  .editor-toolbar-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .editor-toolbar-actions .btn:last-child { grid-column: auto; }
+  .editor-toolbar .btn { padding: 8px 4px; font-size: 11px; white-space: nowrap; }
+  .editor-toolbar .btn > span[aria-hidden="true"] { display: none; }
+  .editor-toolbar .btn .hide-sm { display: none; }
+  .save-status { text-align: center; font-size: 10.5px; }
+
+  /* Header block */
+  .page-heading { padding: 0; }
+  .local-badge { font-size: 10px; padding: 6px 9px; }
+  .grid-4 .field:nth-child(3) { grid-column: 1 / -1; }   /* long document number */
+
+  /* ── Items: table rows → cards ── */
+  .items-wrapper { overflow: visible; border: 0; border-radius: 0; }
+  .items-table, .items-table tbody { display: block; width: 100%; min-width: 0; }
+  .items-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  .items-table tbody { display: grid; gap: 10px; }
+  .items-table tr {
+    display: grid; grid-template-columns: 1fr 1fr 1.35fr; gap: 8px 8px;
+    padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2);
+  }
+  .items-table td { display: block; min-width: 0; padding: 0; border: 0; }
+  .items-table tr:last-child td { border: 0; }
+  .items-table td:nth-child(1) { grid-column: 1 / -1; }
+  .items-table td:nth-child(-n+4)::before {
+    display: block; margin-bottom: 4px; color: #64746b; font-size: 10.5px; font-weight: 700;
+  }
+  .items-table td:nth-child(1)::before { content: "Description"; }
+  .items-table td:nth-child(2)::before { content: "Qty"; }
+  .items-table td:nth-child(3)::before { content: "Unit"; }
+  .items-table td:nth-child(4)::before { content: "Unit price"; }
+  .items-table input { font-size: 16px; min-height: 42px; background: #fff; border-color: var(--line); }
+  .items-table td:nth-child(5) {
+    grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;
+    padding-top: 8px; border-top: 1px dashed #cfdcd4; font-size: 14px;
+  }
+  .items-table td:nth-child(5)::before { content: "Amount"; color: #64746b; font-size: 10.5px; font-weight: 700; }
+  .item-total { padding-right: 0; }
+  .items-table td.row-actions { grid-column: 1 / -1; display: flex; gap: 6px; opacity: 1; }
+  .items-table td.row-actions button { flex: 1; width: auto; height: 38px; }
+
+  .totals { padding: 8px 12px; }
+  .total-row input { width: 130px; }
+
+  /* ── Preview: compact line items ── */
+  .preview-heading { margin-bottom: 8px; }
+  .document { padding: 18px 14px; }
+  .document-info, .notes { grid-template-columns: 1fr; }
+  .document-table, .document-table tbody { display: block; width: 100%; }
+  .document-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  .document-table tr {
+    display: grid; grid-template-columns: auto auto 1fr; gap: 2px 8px;
+    padding: 10px 0; border-bottom: 1px solid #e5e9e6;
+  }
+  .document-table td { display: block; padding: 0; border: 0; font-size: 11px; background: transparent !important; }
+  .document-table td:nth-child(1) { display: none; }
+  .document-table td:nth-child(2) { grid-column: 1 / -1; font-weight: 700; font-size: 12px; }
+  .document-table td:nth-child(3)::before { content: "Qty "; color: #6b7280; }
+  .document-table td:nth-child(4) { color: #6b7280; }
+  .document-table td:last-child { text-align: right; }
+  .document-totals { width: 100%; }
+
+  /* Toast sits above the device safe area while the editor is open */
+  body.in-editor .toast { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+}
+
+@media (max-width: 420px) {
+  .items-table tr { grid-template-columns: 1fr 1fr; }
+  .items-table td:nth-child(4) { grid-column: 1 / -1; }   /* price gets its own full row on very small phones */
+}
+
+/* ── Editor navigation on tablet and mobile ───────────── */
+.mobile-tabs, .back-btn, .preview-print { display: none; }
+.preview-heading-actions { display: flex; align-items: center; gap: 8px; }
+.section-title { cursor: pointer; }
+.section-title::after { content: "⌄"; margin-left: auto; color: #718078; font-size: 16px; line-height: 1; }
+.section.is-collapsed > .section-title::after { content: "›"; }
+.section-title:focus-visible { outline: none; border-radius: 4px; box-shadow: var(--ring); }
+.section.is-collapsed > :not(.section-title) { display: none; }
+
+@media (max-width: 1100px) {
+  .mobile-tabs {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+    position: sticky; top: 72px; z-index: 11;
+    margin: 12px 0; padding: 4px; border: 1px solid var(--line);
+    border-radius: 11px; background: #edf3ef; box-shadow: var(--shadow-sm);
+  }
+  .mobile-tabs button {
+    min-height: 42px; border: 0; border-radius: 8px; background: transparent;
+    color: #52645a; font: inherit; font-size: 13px; font-weight: 750;
+  }
+  .mobile-tabs button[aria-selected="true"] { background: #fff; color: var(--primary-dark); box-shadow: var(--shadow-sm); }
+  .mobile-tabs button:focus-visible, .back-btn:focus-visible, .preview-print:focus-visible { outline: none; box-shadow: var(--ring); }
+  .back-btn {
+    display: inline-flex; align-items: center; min-height: 40px; margin-top: 12px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--primary-dark);
+    font: inherit; font-size: 12px; font-weight: 700;
+  }
+  #workspacePage[data-tab="edit"] .preview, #workspacePage[data-tab="preview"] .editor { display: none; }
+  #workspacePage[data-tab="preview"] .preview { display: block; }
+  .preview-print {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--primary-dark);
+    font: inherit; font-size: 11px; font-weight: 700;
+  }
+  .editor-toolbar { top: 126px; }
+}
+
+@media (max-width: 700px) {
+  .app-content, .app-content .page { overflow-x: clip; }
+  .mobile-tabs { top: 0; margin: 8px 0 12px; }
+  .back-btn { margin-top: 8px; }
+  .editor-toolbar { top: 56px; }
+  .preview-heading-actions > span { display: none; }
+  body.in-editor .sidebar { display: none; }
+  body.in-editor .app-layout { padding-bottom: 16px; }
+  body.in-editor .app-content { padding-bottom: 16px; }
+}
+
+@media print {
+  .mobile-tabs, .back-btn, .preview-print { display: none !important; }
+  #workspacePage .editor { display: none !important; }
+  #workspacePage .preview { display: block !important; }
+}
